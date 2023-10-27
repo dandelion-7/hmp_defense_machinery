@@ -29,4 +29,5 @@ Script 4s performs fastqc on the datasets after fastp filtering. Because MGX/MTX
 
 <font color=red>Hereafter, the filtered MGX/MTX/MVX files from the two studies are put into a merged folder for MGX/MTX/MVX separately. And the downstream analysis won't specify the Nature/Nat.Microbiol paper.</font>
 
-
+### 5
+Script 5 performs bowtie2 of MGX/MTX/MVX reads onto human genome to eliminate human-derived reads.
