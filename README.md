@@ -31,3 +31,29 @@ Script 4s performs fastqc on the datasets after fastp filtering. Because MGX/MTX
 
 ### 5
 Script 5 performs bowtie2 of MGX/MTX/MVX reads onto human genome to eliminate human-derived reads.
+
+### 6-1/6-2
+Script 6s performs read assembly with megahit. Each subject's MGX/MVX samples at different time points were pooled for mixed assembly.
+
+Megahit accepts multiple PE/SE files separated with comma, so the `xargs` was used in the script for substituting `\n` with `,` through sed command. Meanwhile, must follow `megahit [options] {-1 <pe1> -2 <pe2> | --12 <pe12> | -r <se>} [-o <out_dir>]` the order of parameters/input files, options need to be set before the files.
+
+### 7
+Script 7 is more mapping MTX reads onto rRNA reference, so as to eliminate the rRNA contamination in the metatranscriptomic data. The rRNA bowtie2 reference is from QQ, which works fairly well.
+
+Fasta files of LSU/SSU rRNA were downloaded from SILVA, and constructed into reference with `bowtie2-build`, but the mapping rates of MTX were very low. So the exact input file for rRNA reference should be further considered.
+
+### 8
+Script 8 uses geNomad to extract virus/plasmid contigs from the assembled contigs of MGX/MVX data. "total" or "without-nn" end-to-end flows of geNomad were both run on the MGX/MVX contigs.
+
+The `--threads` of "total" mode need to be low. 2 is OK.
+
+### 9
+Script 9 uses bowtie2 to align filtered MGX (from script 5) and MTX (from script 7) to assembled MGX contigs.
+
+### 10
+Script 10 performs dereplication of the assembled MGX/MTX contigs from script 6 with CD-HIT. 
+
+The sequence identity (0.95) and alignment coverage over shorter sequences (0.9) are referred to other publications: 
+1.Viruses interact with hosts that span distantly related microbial domains in dense hydrothermal mats, 2023, Nature Microbiology. (0.95; 0.85)
+2.Genomic variation and strain-specific functional adaptation in the human gut microbiome during early life, 2019, Nature Microbiology. (0.95; 0.9)
+3.Elevated rates of horizontal gene transfer in the industrialized human microbiome, 2021, Cell. (0.9 identity with vsearch).
