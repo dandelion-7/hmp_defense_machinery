@@ -83,40 +83,60 @@ else
 				SE=${sample}_rRNA_dep.fastq
 				SAM=${OUTPUT_BAM_DIR}/${sample}.sam
 				BAM=${OUTPUT_BAM_DIR}/${sample}.bam
+				SORTED_BAM=${OUTPUT_BAM_DIR}/${sample}_sorted.bam
+				BAI=${OUTPUT_BAM_DIR}/${sample}_sorted.bai
 				LOG=${OUTPUT_LOG_DIR}/${sample}.log
-				bowtie2 -p 16 -x ${ref} -U ${SE} -S ${SAM} 2> ${LOG}
-				samtools view -b -S ${SAM} > ${BAM}; rm ${SAM}
+				#bowtie2 -p 32 -x ${ref} -U ${SE} -S ${SAM} 2> ${LOG}
+				#samtools view -b -S ${SAM} > ${BAM}; rm ${SAM}
+				samtools sort --threads 32 -o ${SORTED_BAM} ${BAM}; rm ${BAM}
+				samtools index -b ${SORTED_BAM} ${BAI}
 				# some MTX files are single-ended, so this condition need to be specified.
 			elif [ ${1} == "MTX" ]; then
 				PE1=${sample}_rRNA_dep.1.fastq
 				PE2=${sample}_rRNA_dep.2.fastq
 				SAM=${OUTPUT_BAM_DIR}/${sample}.sam
 				BAM=${OUTPUT_BAM_DIR}/${sample}.bam
+				SORTED_BAM=${OUTPUT_BAM_DIR}/${sample}_sorted.bam
+				BAI=${OUTPUT_BAM_DIR}/${sample}_sorted.bai
                                 LOG=${OUTPUT_LOG_DIR}/${sample}.log
-				bowtie2 -p 16 -x ${ref} -1 ${PE1} -2 ${PE2} -S ${SAM} 2> ${LOG}
-				samtools view -b -S ${SAM} > ${BAM}; rm ${SAM}
+				#bowtie2 -p 32 -x ${ref} -1 ${PE1} -2 ${PE2} -S ${SAM} 2> ${LOG}
+				#samtools view -b -S ${SAM} > ${BAM}; rm ${SAM}
+				samtools sort --threads 32 -o ${SORTED_BAM} ${BAM}; rm ${BAM}
+				samtools index -b ${SORTED_BAM} ${BAI}
 
 				SE=${sample}_rRNA_dep.fastq
 				SE_SAM=${OUTPUT_BAM_DIR}/${sample}_SE.sam
                                 SE_BAM=${OUTPUT_BAM_DIR}/${sample}_SE.bam
+				SE_SORTED_BAM=${OUTPUT_BAM_DIR}/${sample}_SE_sorted.bam
+				SE_BAI=${OUTPUT_BAM_DIR}/${sample}_SE_sorted.bai
                                 SE_LOG=${OUTPUT_LOG_DIR}/${sample}_SE.log
-                                bowtie2 -p 16 -x ${ref} -U ${SE} -S ${SE_SAM} 2> ${SE_LOG}
-                                samtools view -b -S ${SE_SAM} > ${SE_BAM}; rm ${SE_SAM}
+                                #bowtie2 -p 32 -x ${ref} -U ${SE} -S ${SE_SAM} 2> ${SE_LOG}
+                                #samtools view -b -S ${SE_SAM} > ${SE_BAM}; rm ${SE_SAM}
+				samtools sort --threads 32 -o ${SE_SORTED_BAM} ${SE_BAM}; rm ${SE_BAM}
+				samtools index -b ${SE_SORTED_BAM} ${SE_BAI}
 			else
 				PE1=${sample}_dehosted.1.fastq
                                 PE2=${sample}_dehosted.2.fastq
                                 SAM=${OUTPUT_BAM_DIR}/${sample}.sam
                                 BAM=${OUTPUT_BAM_DIR}/${sample}.bam
+				SORTED_BAM=${OUTPUT_BAM_DIR}/${sample}_sorted.bam
+				BAI=${OUTPUT_BAM_DIR}/${sample}_sorted.bai
                                 LOG=${OUTPUT_LOG_DIR}/${sample}.log
-                                bowtie2 -p 16 -x ${ref} -1 ${PE1} -2 ${PE2} -S ${SAM} 2> ${LOG}
-                                samtools view -b -S ${SAM} > ${BAM}; rm ${SAM}
+                                #bowtie2 -p 32 -x ${ref} -1 ${PE1} -2 ${PE2} -S ${SAM} 2> ${LOG}
+                                #samtools view -b -S ${SAM} > ${BAM}; rm ${SAM}
+				samtools sort --threads 32 -o ${SORTED_BAM} ${BAM}; rm ${BAM}
+				samtools index -b ${SORTED_BAM} ${BAI}
 
                                 SE=${sample}_dehosted.fastq
                                 SE_SAM=${OUTPUT_BAM_DIR}/${sample}_SE.sam
                                 SE_BAM=${OUTPUT_BAM_DIR}/${sample}_SE.bam
+				SE_SORTED_BAM=${OUTPUT_BAM_DIR}/${sample}_SE_sorted.bam
+				SE_BAI=${OUTPUT_BAM_DIR}/${sample}_SE_sorted.bai
                                 SE_LOG=${OUTPUT_LOG_DIR}/${sample}_SE.log
-                                bowtie2 -p 16 -x ${ref} -U ${SE} -S ${SE_SAM} 2> ${SE_LOG}
-                                samtools view -b -S ${SE_SAM} > ${SE_BAM}; rm ${SE_SAM}
+                                #bowtie2 -p 32 -x ${ref} -U ${SE} -S ${SE_SAM} 2> ${SE_LOG}
+                                #samtools view -b -S ${SE_SAM} > ${SE_BAM}; rm ${SE_SAM}
+				samtools sort --threads 32 -o ${SE_SORTED_BAM} ${SE_BAM}; rm ${SE_BAM}
+				samtools index -b ${SE_SORTED_BAM} ${SE_BAI}
 			fi
 		done
 	done

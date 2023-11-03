@@ -57,3 +57,9 @@ The sequence identity (0.95) and alignment coverage over shorter sequences (0.9)
 1.Viruses interact with hosts that span distantly related microbial domains in dense hydrothermal mats, 2023, Nature Microbiology. (0.95; 0.85)
 2.Genomic variation and strain-specific functional adaptation in the human gut microbiome during early life, 2019, Nature Microbiology. (0.95; 0.9)
 3.Elevated rates of horizontal gene transfer in the industrialized human microbiome, 2021, Cell. (0.9 identity with vsearch).
+
+<font color=red>CD-HIT is too slow for the large amounts of assembled contigs. Script 10 is not finished.</font>
+
+### 11
+Script 11 performs contig binning with metabat2/maxbin2 with contigs from script 6 and mapping results from script 9. The results of binning might be further used for DAS tools to optimize the bins.
+
