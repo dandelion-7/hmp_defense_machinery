@@ -60,6 +60,16 @@ The sequence identity (0.95) and alignment coverage over shorter sequences (0.9)
 
 <font color=red>CD-HIT is too slow for the large amounts of assembled contigs. Script 10 is not finished.</font>
 
-### 11
-Script 11 performs contig binning with metabat2/maxbin2 with contigs from script 6 and mapping results from script 9. The results of binning might be further used for DAS tools to optimize the bins.
+### 11-1/11-2/11-3
+Script 11-1 performs contig binning with metabat2/maxbin2 with contigs from script 6 and mapping results from script 9. The results of binning might be further used for DAS tools to optimize the bins.
+
+Script 11-2/3 are designed for combining the binning results from Metabat2 and MaxBin2 to refine the bins with DAS Tool, but DAS Tool can't run successfully, so the script is not done currently.
+
+### 12-1/12-2
+Script 12-1 split all the assembled long contigs (>=500) into 500 subsets, which allows easy running of DefenseFinder. Then prodigal will predict all the CDSs from the contigs.
+
+Script 12-2 utilizes DefenseFinder to predict possible anti-phage defense related genes.
+
+### 13
+Script 13 uses MMseqs2 to assign taxonomies to the assembled contigs.
 
