@@ -48,7 +48,7 @@ if [ ${command} == "metabat2" ]; then
 		contigs=${INPUT_CONTIGS_DIR}/${subject}/${subject}_MGX.contigs.fa
 
 		jgi_summarize_bam_contig_depths --minContigLength 500 --outputDepth ${depth} ${bam}
-		metabat2 -m 1500 -i ${contigs} -o ${subject_bin_dir}/${subject} -a ${depth} -t 32 --unbinned --verbose > ${subject_bin_dir}/${subject}_metabat2.log
+		metabat2 -m 1500 -i ${contigs} -o ${subject_bin_dir}/${subject} -a ${depth} -t 32 --unbinned --verbose > ${subject_bin_dir}/${subject}_metabat2.log # unbinned.fa files were renamed to unbinned.fasta in script 14.
 
 	done
 	conda deactivate
