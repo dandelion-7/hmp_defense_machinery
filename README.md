@@ -75,3 +75,11 @@ Script 12-2 utilizes DefenseFinder to predict possible anti-phage defense relate
 ### 13
 Script 13 uses MMseqs2 to assign taxonomies to the assembled contigs.
 
+### 14
+Script 14 evaluates the quality (completeness and contamination) of bins, and assign taxonomy.
+
+### 15
+Script 15 assign taxonomy to the bins.
+
+### 16s
+Script 16s summarizes the results of defense-related genes' annotation to generate the gff files (1). And through featureCounts, the quantity of mapped reads onto predicted defense genes are obtained (2-4). Then the abundances of these defense related genes in MGX and MTX datasets are summarized for all subjects (5-7).
