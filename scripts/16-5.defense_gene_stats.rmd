@@ -30,7 +30,7 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 # Counting matrix for each subject will be too large after merging, so a loop will be adopted to summarize the counts independently.
 ## Subject 2039 will be the example.
 
-### Mapping result is summarized to get the subject, time point, sample read count (total number of mapped reads in a sample)..
+### Mapping result is summarized to get the subject, time point, sample read count (total number of mapped reads in a sample).
 ```{r}
 mapping_counts <- read.delim('~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/simplified_counts/MGX/2039_MGX_simplified_featureCounts.txt', sep = '\t', header = F)
 colnames(mapping_counts) <- c("gene_name", "CDS", "sample", "mapping_count", "subject")
@@ -39,9 +39,11 @@ samples <- separate(data = samples, col = `mapping_counts$sample`, sep = "_", in
 mapping_counts <- cbind(mapping_counts, samples[2:5])
 sample_read_counts <- mapping_counts %>% group_by(sample, subject, time_point) %>% summarize(sample_read_count = sum(mapping_count))
 mapping_counts <- left_join(mapping_counts, sample_read_counts, by = c("sample", "subject", "time_point"))
+mapping_counts %>% write.table("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_summarized_mapping_count.txt", sep = "\t", col.names = T, row.names = F, quote = F) # write the subject-specific mapping table.
+# ~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_summarized_mapping_count.txt
 ```
 
-### Summarize annotation of CDS (prediction of defense related genes) to get gene lengths, average system sizes, etc.
+### Summarize annotation of CDS (prediction of defense related genes) to get gene lengths and average system sizes.
 ```{r}
 cds <- read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/gene_annotation/16-1-3.2039_cds_with_fine_annotation.txt", sep = "\t", header = T)
 cds <- cds[, -c(31, 40, 41, 43, 44, 45)]
@@ -56,16 +58,105 @@ system_counts <- system_gene_counts %>% group_by(type) %>% summarize(type_count 
 system_average_gene_counts <- left_join(system_counts, type_gene_counts, by = "type")
 system_average_gene_counts$system_average_gene_count <- system_average_gene_counts$type_gene_count / system_average_gene_counts$type_count # calculate the average number of gene in one type of system.
 n_distinct(system_average_gene_counts$type)
+
+cds <- left_join(cds, system_average_gene_counts[, c(1, 4)], by = "type")
+cds %>% write.table("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_summarized_total_cds_annotation.txt", sep = "\t", col.names = T, row.names = F, quote = F) # write the subject-specific table containing total-cds information.
+# ~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_summarized_total_cds_annotation.txt
+
 defense_cds <- left_join(defense_cds, system_average_gene_counts[, c(1, 4)], by = "type")
+defense_cds %>% write.table("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_summarized_defense_cds_annotation.txt", sep = "\t", col.names = T, row.names = F, quote = F) # write the subject-specific table containing defense-cds information.
+# ~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_summarized_defense_cds_annotation.txt
 ```
 
 ### Merge the summarized mapping results and CDS annotations, and the normalized mapping counts are calculated.
 ```{r}
-mapping_matrix <- left_join(mapping_counts, defense_cds, by = c("subject", "CDS", "gene_name"))
+mapping_matrix <- left_join(mapping_counts, defense_cds, by = c("subject", "CDS", "gene_name")) # both mapping_counts and defense_cds have been written into table.
+mapping_matrix$time_point_num <- as.numeric(str_remove_all(mapping_matrix$time_point, pattern = "C"))
 defense_mapping_matrix <- mapping_matrix %>% filter(gene_name != "non-defense-gene")
-defense_gene_proportions <- defense_mapping_matrix %>% group_by(sample, subject, time_point, sample_read_count) %>% summarize(defense_gene_mapping_count = sum(mapping_count))
-defense_gene_proportions %>% ggplot(aes(x = as.character.numeric_version(as.numeric(str_remove_all(time_point, "C"))))) +
+defense_gene_proportions <- defense_mapping_matrix %>% group_by(sample, subject, time_point, time_point_num, sample_read_count) %>% summarize(defense_gene_mapping_count = sum(mapping_count))
+defense_gene_proportions %>% ggplot(aes(x = as.character.numeric_version(time_point_num))) +
   geom_col(aes(y = defense_gene_mapping_count / sample_read_count * 100), width = 0.8, fill = '#bdbdbd') + 
-  geom_line(aes(y = sample_read_count / 5e+7))
+  geom_point(aes(y = sample_read_count / 5e+7), shape = 25, color = "black", fill = "black", size = 3) + 
+  scale_y_continuous(name = "Predicted defense gene reads proportion(%)", sec.axis = sec_axis(~.*5e+7, name = 'Total reads'), limits = c(-0.001, 0.9), breaks = c(0, 0.1, 0.3, 0.5, 0.7, 0.9)) +
+  theme_minimal() + 
+  theme(axis.text.y.left = element_text(face = 'bold', color = '#969696', size = 12),
+        axis.ticks.y.left = element_line(color = '#969696'),
+        axis.title.y.left = element_text(color = '#969696', face = 'bold'),
+        axis.text.y.right = element_text(face = 'bold', color = '#000000'), 
+        axis.title.y.right = element_text(color = '#000000', face = 'bold'),
+        axis.ticks.y.right = element_line(color = '#000000')) + 
+  labs(x = "Time point") # histogram showing percentage of defense-gene-mapping reads and total sequencing reads.
+# ~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_defense_gene_proportion
+
+defense_mapping_matrix$rpkm <- defense_mapping_matrix$mapping_count / defense_mapping_matrix$gene_len / defense_mapping_matrix$sample_read_count * 1e+9
+defense_mapping_matrix %>% 
+  write.table("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_defense_gene_matrix.txt", 
+              sep = "\t", col.names = T, row.names = F, quote = F) # mapping counts, rpkm, cds information, are integrated in defense_gene_mapping_matrix
+#~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_defense_gene_matrix.txt
+
+type_mapping_matrix <- defense_mapping_matrix %>% group_by(sample, subject, time_point, time_point_num, type, system_average_gene_count) %>%
+  summarize(type_rpkm = sum(rpkm))
+type_mapping_matrix$normalized_type_rpkm <- type_mapping_matrix$type_rpkm / type_mapping_matrix$system_average_gene_count
+# normalize the rpkm of a system against the average size (gene number) of the system.
+type_mapping_matrix_spread <- type_mapping_matrix[, -c(6,7)] %>% spread(key = type, value = normalized_type_rpkm, fill = 0)
+type_mapping_matrix <- type_mapping_matrix_spread %>% gather(key = type, value = normalized_type_rpkm, 
+                                                             colnames(type_mapping_matrix_spread)[5:80]) 
+# spread and re-gather to fill 0 for the types not present in a sample.
+normalized_type_rpkm_sum <- type_mapping_matrix %>% group_by(sample, subject, time_point, time_point_num) %>% 
+  summarize(normalized_type_rpkm_sum = sum(normalized_type_rpkm))
+type_mapping_matrix <- left_join(type_mapping_matrix, normalized_type_rpkm_sum, 
+                                 by = c("sample", "subject", "time_point", "time_point_num"))
+type_mapping_matrix$type_relative_abundance <- type_mapping_matrix$normalized_type_rpkm / type_mapping_matrix$normalized_type_rpkm_sum 
+type_mapping_matrix %>% write.table("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_defense_type_matrix.txt", 
+                                    sep = "\t", col.names = T, row.names = F, quote = F) # Normalized rpkm and abundances of defense types are in defense_type_matrix.
+#~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_defense_type_matrix
+```
+
+### Calculate the average abundance of each system type across all samples.
+```{r}
+average_normalized_type_rpkm_and_relative_abundance <- type_mapping_matrix %>% group_by(type) %>% 
+  summarize(average_normalized_type_rpkm = 
+              sum(normalized_type_rpkm) / n_distinct(type_mapping_matrix$time_point) / n_distinct(type_mapping_matrix$subject), 
+            average_relative_abundance = 
+              sum(type_relative_abundance) / n_distinct(type_mapping_matrix$time_point) / n_distinct(type_mapping_matrix$subject))
+type_summary <- left_join(type_mapping_matrix, average_normalized_type_rpkm_and_relative_abundance, by = "type")
+type_summary %>% write.table("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_defense_type_summary.txt", 
+                             sep = "\t", col.names = T, row.names = F, quote = F) # type_summary has the average abundances and rpkm column, and also the legend columns, which is read for visulization.
+#~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_defense_type_summary.txt
+```
+
+### Visualize the abundances of systems
+```{r}
+type_summary <- type_summary %>% mutate(
+  legend_following_average_abundance = case_when(
+    average_relative_abundance >= 0.01 ~ type,
+    average_relative_abundance < 0.01 ~ " others"), 
+  legend_following_in_sample_abundance = case_when(
+    type_relative_abundance >= 0.01 ~ type, 
+    type_relative_abundance < 0.01 ~ " others"
+  ))
+n_distinct(type_summary$legend_following_average_abundance)
+n_distinct(type_summary$legend_following_in_sample_abundance)
+type_summary %>% ggplot(aes(x = as.character.numeric_version(time_point_num), y = type_relative_abundance)) + 
+  geom_col(aes(fill = reorder(legend_following_in_sample_abundance, type_relative_abundance))) + 
+  scale_fill_manual(values = color_33) + 
+  labs(fill = "Types of defense systems")# defense types with relative abundances >= 0.01 in each sample are colored.
+#~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_sample_type_composition_with_in_sample_abundances
+type_summary %>% ggplot(aes(x = as.character.numeric_version(time_point_num), y = type_relative_abundance)) + 
+  geom_col(aes(fill = reorder(legend_following_average_abundance, average_relative_abundance))) + 
+  scale_fill_manual(values = color_33) + 
+  labs(fill = "Types of defense systems")# defense types with average abundances >= 0.01 across all samples are colored.
+#~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_sample_type_composition_with_average_abundances
+
+type_summary %>% filter(average_relative_abundance >= 0.01) %>% 
+  ggplot(aes(x = reorder(type, -average_relative_abundance), y = type_relative_abundance)) + 
+  geom_boxplot(outlier.alpha = 0) + 
+  geom_point(aes(fill = as.character.numeric_version(time_point_num)), shape = 21, alpha = 0.8, position = position_jitter(0.15)) + 
+  stat_boxplot(geom = 'errorbar', width = 0.3) + 
+  stat_summary(fun = "mean", geom = "point", shape = 25, color = "red", fill = "red", size = 2) + 
+  labs(x = "Defense system types (average abundances >= 1%)") + 
+  theme(legend.position = "None")# relative abundances of defense systems of the total immune repertoire.
+#~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/defense_gene_stat/2039_sample_type_relative_abundances
+
 ```
 

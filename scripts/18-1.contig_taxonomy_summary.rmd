@@ -1,0 +1,71 @@
+---
+title: "18-1.contig_taxonomy_summary"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+#===============================================================================
+
+### Load libraries and set the directory
+```{r}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(randomcoloR)
+
+getwd()
+setwd("~/crisprome/hmp/scripts/")
+```
+
+## Because the number of total contigs are too large, so the contig taxonomy annotation results will be summarized for each subject, and this script will be run for each subject's data through a loop. Subject 2039 will be an example.
+
+### Summarize the taxonomy annotation table from mmseqs2.
+```{r}
+mmseqs2_matrix <- read.delim("~/crisprome/hmp/intermediates/13.mmseqs_taxonomy/MGX/2039/taxon/2039_MGX.txt", sep = "\t", header = F)
+contigs <- as.data.frame(mmseqs2_matrix$V1)
+contigs <- separate(contigs, `mmseqs2_matrix$V1`, sep = "_", into = c("subject", "data_type", "kmer", "id", "flag", "multi", "len"))
+mmseqs2_matrix$subject <- as.numeric(contigs$subject)
+mmseqs2_matrix$contig_len <- as.numeric(str_remove_all(contigs$len, "len="))
+colnames(mmseqs2_matrix)[1:8] <- c("contig", "taxid", "rank", "taxon", "total_orf", "assigned_orf", "corresponding_orf", "-logE")
+mmseqs2_matrix <- mmseqs2_matrix[, -c(3, 4, 9)]
+mmseqs2_matrix %>% write.table("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/2039_summarized_matrix.txt", sep = "\t", col.names = T, row.names = F, quote = F)
+
+taxid <- mmseqs2_matrix$taxid
+taxid %>% write.table("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/2039_taxids.txt", col.names = F, row.names = F, quote = F)
+```
+
+### Taxonkit is used to convert taxonid into taxonomy annotations.
+```{bash}
+taxonkit lineage 2039_taxids.txt --threads 64 | taxonkit reformat -f "{k}\t{p}\t{c}\t{o}\t{f}\t{g}\t{s}" -F -P --out-file 2039_taxons.txt
+```
+
+### Integrate the taxonomy annotations with the table.
+```{r}
+taxon <- read.delim("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/2039_taxons.txt", sep = "\t", header = F)
+colnames(taxon) <- c("taxid", "mmseqs2_taxon", "mmseqs2_kingdom", "mmseqs2_phylum", "mmseqs2_class", "mmseqs2_order", "mmseqs2_family", "mmseqs2_genus", "mmseqs2_species")
+```
+

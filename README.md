@@ -22,6 +22,8 @@ For MGX datasets, script 3-1 trims the first 15bp at the 5'end of paired reads, 
 
 For MTX/MVX datasets, script 3-2/3-3 trims the first 5bp at the 5'end of reads.
 
+After finishing script 5 and 7, filtered data from script 3 can be deleted for storage space.
+
 ### 4/4-1/4-2/4-3/4-4
 Script 4s performs fastqc on the datasets after fastp filtering. Because MGX/MTX/MVX files were grouped, so the script 4s are also splited for different types of files. Outputs of fastqc were classified according to library types (MGX/MTX/MVX) and visualized with multiqc. 
 
