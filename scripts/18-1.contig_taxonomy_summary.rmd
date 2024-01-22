@@ -39,6 +39,8 @@ library(randomcoloR)
 
 getwd()
 setwd("~/crisprome/hmp/scripts/")
+
+color_53 <- as.array(read.delim("~/crisprome/hmp/scripts/color_53.txt", header = F, sep = "\t")[, 1])
 ```
 
 ## Because the number of total contigs are too large, so the contig taxonomy annotation results will be summarized for each subject, and this script will be run for each subject's data through a loop. Subject 2039 will be an example.
@@ -52,7 +54,6 @@ mmseqs2_matrix$subject <- as.numeric(contigs$subject)
 mmseqs2_matrix$contig_len <- as.numeric(str_remove_all(contigs$len, "len="))
 colnames(mmseqs2_matrix)[1:8] <- c("contig", "taxid", "rank", "taxon", "total_orf", "assigned_orf", "corresponding_orf", "-logE")
 mmseqs2_matrix <- mmseqs2_matrix[, -c(3, 4, 9)]
-mmseqs2_matrix %>% write.table("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/2039_summarized_matrix.txt", sep = "\t", col.names = T, row.names = F, quote = F)
 
 taxid <- mmseqs2_matrix$taxid
 taxid %>% write.table("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/2039_taxids.txt", col.names = F, row.names = F, quote = F)
@@ -67,5 +68,34 @@ taxonkit lineage 2039_taxids.txt --threads 64 | taxonkit reformat -f "{k}\t{p}\t
 ```{r}
 taxon <- read.delim("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/2039_taxons.txt", sep = "\t", header = F)
 colnames(taxon) <- c("taxid", "mmseqs2_taxon", "mmseqs2_kingdom", "mmseqs2_phylum", "mmseqs2_class", "mmseqs2_order", "mmseqs2_family", "mmseqs2_genus", "mmseqs2_species")
+contig_taxon_matrix <- cbind(mmseqs2_matrix[, -2], taxon[, -c(1, 2)])
+colnames(contig_taxon_matrix)[1] <- "contig_id"
+contig_taxon_matrix %>% 
+  write.table("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/2039_summarized_contig_taxon_matrix.txt", 
+              sep = "\t", col.names = T, row.names = F, quote = F)
+```
+
+### Merge the mapping counts of defense genes and the contig taxonomy table.
+```{r}
+defense_gene_matrix <- read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/2039_defense_gene_matrix.txt", 
+                                  sep = "\t", header = T)
+colnames(defense_gene_matrix)
+defense_gene_mapping_taxon_matrix <- left_join(defense_gene_matrix[, -16], contig_taxon_matrix, by = "contig_id")
+```
+
+
+
+### evaluate rpkms of various defense system types from different phyla.
+```{r}
+defense_type_phyla_matrix <- defense_gene_mapping_taxon_matrix %>% group_by(type, system_average_gene_count, mmseqs2_phylum) %>% 
+  summarize(type_rpkm = sum(rpkm))
+defense_type_phyla_matrix$normalized_type_rpkm <- defense_type_phyla_matrix$type_rpkm / defense_type_phyla_matrix$system_average_gene_count
+```
+
+### evaluate rpkms of various defense system types from different genera.
+```{r}
+defense_type_genus_matrix <- defense_gene_mapping_taxon_matrix %>% group_by(type, system_average_gene_count, mmseqs2_genus) %>% 
+  summarize(type_rpkm = sum(rpkm))
+defense_type_genus_matrix$normalzied_type_rpkm <- defense_type_genus_matrix$type_rpkm / defense_type_genus_matrix$system_average_gene_count
 ```
 

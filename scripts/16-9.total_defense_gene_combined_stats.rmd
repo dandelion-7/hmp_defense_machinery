@@ -1,0 +1,709 @@
+---
+title: "all subjects MGX and MTX analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# load libraries
+```{r}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(randomcoloR)
+library(vegan)
+```
+
+
+# set parameters
+```{r}
+getwd()
+setwd("~/crisprome/hmp/scripts/")
+color_53 <- as.array(read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/color_53.txt", header = F)[, 1])
+```
+
+# summarize defense gene proportions in MGX, MTX, and combined comparision of both.
+
+## read MGX defense mapping matrix table
+```{r}
+defense_mapping_matrix <- read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/total_defense_gene_matrix.txt",
+                                     sep = "\t", header = T)
+```
+total_defense_gene_matrix.txt contains all the mapping counts and annotations of CDSs predicted to be defense-related from the MGX data.
+
+### summarize the proportions of defense-gene mapping reads across all subjects' samples in MGX data.
+```{r}
+defense_gene_proportions <- defense_mapping_matrix %>% group_by(sample, subject, time_point, time_point_num, sample_read_count) %>% 
+  summarize(defense_gene_mapping_count = sum(mapping_count))
+defense_gene_proportions_column <- defense_gene_proportions %>% 
+  ggplot(aes(x = as.character.numeric_version(time_point_num))) + 
+  facet_wrap(.~ subject, scales = "free_x", nrow = 3) + 
+  geom_col(aes(y = defense_gene_mapping_count / sample_read_count * 100), width = 0.8, fill = '#bdbdbd') + 
+  geom_point(aes(y = sample_read_count / 5e+7), shape = 25, color = "black", fill = "black", size = 0.5) + 
+  scale_y_continuous(name = "Proportion of reads mapped to defense-related genes (%)", sec.axis = sec_axis(~.*5e+7, name = 'Total reads of samples')) + 
+  theme_minimal() + 
+  theme(axis.text.y.left = element_text(face = 'bold', color = '#969696', size = 12),
+        axis.ticks.y.left = element_line(color = '#969696'),
+        axis.title.y.left = element_text(color = '#969696', face = 'bold'),
+        axis.text.y.right = element_text(face = 'bold', color = '#000000'), 
+        axis.title.y.right = element_text(color = '#000000', face = 'bold'),
+        axis.ticks.y.right = element_line(color = '#000000'),
+        axis.text.x = element_blank()) + 
+  labs(x = "Time point")
+defense_gene_proportions_column
+
+defense_gene_proportions_scatter <- defense_gene_proportions %>% 
+  ggplot(aes(x = sample_read_count/1e+6, y = defense_gene_mapping_count / sample_read_count * 100)) + 
+  geom_point(aes(fill = as.character(subject)), shape = 21, size = 4, alpha = 0.8) + 
+  scale_x_continuous(limits = c(1, 35), breaks = c(0, 5, 10, 15, 20, 25, 30)) + 
+  theme(legend.position = "None") + 
+  scale_fill_manual(values = color_53) + 
+  geom_smooth(formula = "y~x", method = "lm") + 
+  labs(x = "Total reads of samples (million)", y = "Proportion of reads mapped to defense-related genes (%)")
+defense_gene_proportions_scatter
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9.MGX_defense_gene_proportions.pdf", paper = "a4")
+print(defense_gene_proportions_column)
+print(defense_gene_proportions_scatter)
+dev.off()
+```
+
+## read MTX defense mapping matrix table
+```{r}
+MTX_defense_mapping_matrix <- 
+  read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/total_MTX_defense_gene_matrix.txt",
+             sep = "\t", header = T)
+```
+total_MTX_defense_gene_matrix.txt contains 
+
+### summarize the proportion of reads mapped to defense genes in MTX data.
+```{r}
+MTX_defense_gene_proportions <- MTX_defense_mapping_matrix %>% group_by(sample, subject, time_point, time_point_num, sample_read_count) %>% 
+  summarize(defense_gene_mapping_count = sum(mapping_count))
+
+MTX_defense_gene_proportions_column <- MTX_defense_gene_proportions %>% 
+  ggplot(aes(x = as.character.numeric_version(time_point_num))) + 
+  facet_wrap(.~ subject, scales = "free_x", nrow = 3) + 
+  geom_col(aes(y = defense_gene_mapping_count / sample_read_count * 100), width = 0.8, fill = '#bdbdbd') + 
+  geom_point(aes(y = sample_read_count / 3e+7), shape = 25, color = "black", fill = "black", size = 0.5) + 
+  scale_y_continuous(name = "Proportion of reads mapped to defense-related genes (%)", sec.axis = sec_axis(~.*3e+7, name = 'Total reads of samples')) + 
+  theme_minimal() + 
+  theme(axis.text.y.left = element_text(face = 'bold', color = '#969696', size = 12),
+        axis.ticks.y.left = element_line(color = '#969696'),
+        axis.title.y.left = element_text(color = '#969696', face = 'bold'),
+        axis.text.y.right = element_text(face = 'bold', color = '#000000'), 
+        axis.title.y.right = element_text(color = '#000000', face = 'bold'),
+        axis.ticks.y.right = element_line(color = '#000000'),
+        axis.text.x = element_blank()) + 
+  labs(x = "Time point")
+MTX_defense_gene_proportions_column
+
+MTX_defense_gene_proportions_scatter <- MTX_defense_gene_proportions %>% 
+  ggplot(aes(x = sample_read_count/1e+6, y = defense_gene_mapping_count / sample_read_count * 100)) + 
+  geom_point(aes(fill = as.character(subject)), shape = 21, size = 4, alpha = 0.8) + 
+  # scale_x_continuous(limits = c(1, 35), breaks = c(0, 5, 10, 15, 20, 25, 30)) +
+  theme(legend.position = "None") + 
+  scale_fill_manual(values = color_53) + 
+  geom_smooth(formula = "y~x", method = "lm") + 
+  labs(x = "Total reads of samples (million)", y = "Proportion of reads mapped to defense-related genes (%)")
+MTX_defense_gene_proportions_scatter
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9.MTX_defense_gene_proportions.pdf", paper = "a4")
+print(MTX_defense_gene_proportions_column)
+print(MTX_defense_gene_proportions_scatter)
+dev.off()
+```
+
+## compare the proportions of defense genes in MGX and MTX
+```{r}
+defense_gene_proportions$MGX_proportions <- defense_gene_proportions$defense_gene_mapping_count / defense_gene_proportions$sample_read_count
+defense_gene_proportions$data_type <- "MGX"
+MTX_defense_gene_proportions$MTX_proportions <- MTX_defense_gene_proportions$defense_gene_mapping_count / MTX_defense_gene_proportions$sample_read_count
+MTX_defense_gene_proportions$data_type <- "MTX"
+
+merged_defense_gene_proportions <- left_join(defense_gene_proportions[, -c(1, 5, 6, 8)], MTX_defense_gene_proportions[, -c(1, 5, 6, 8)], 
+                                             by = c("subject", "time_point", "time_point_num"))
+merged_defense_gene_proportions <- merged_defense_gene_proportions %>%
+  gather(key = "data_type", value = "defense_gene_proportion", MTX_proportions, MGX_proportions)
+
+proportion_comparison <- merged_defense_gene_proportions %>% 
+  ggplot(aes(x = str_remove(data_type, "_proportions"), y = defense_gene_proportion*100)) + 
+  stat_boxplot(geom = "errorbar", width = 0.15) +
+  geom_boxplot(outlier.alpha = 0, width = 0.5) +
+  # geom_violin() + 
+  geom_point(aes(fill = as.character(subject)), shape = 21, position = position_jitter(width = 0.05), size = 2, alpha = 0.8) + 
+  scale_y_continuous(limits = c(-0.001, 1.9)) + 
+  scale_fill_manual(values = color_53) + 
+  theme_minimal() + 
+  theme(axis.line = element_line(colour = "black")) + 
+  theme(legend.position = "None") + 
+  theme(axis.text = element_text(face = "bold")) +
+  labs(x = "", y = "Proportion of reads mapped to defense-related genes (%)")
+ttest <- t.test(merged_defense_gene_proportions[merged_defense_gene_proportions$data_type == "MTX_proportions", 5],
+       merged_defense_gene_proportions[merged_defense_gene_proportions$data_type == "MGX_proportions", 5])
+proportion_comparison
+ttest
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9.MGX_MTX_proportion_comparison.pdf", paper = "a4")
+print(proportion_comparison)
+print(ttest)
+dev.off()
+```
+
+
+
+
+# summarize abundances of different defense systems
+
+## read the type_summary table of MGX
+```{r}
+type_summary <- read.table("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/total_defense_type_summary.txt", 
+                           header = T, sep = "\t")
+
+overall_sample <- n_distinct(type_summary$sample) # get the total number of samples analyzed here.
+overall_type_abundances <- type_summary %>% group_by(type) %>% 
+  summarize(overall_average_normalized_type_rpkm = sum(normalized_type_rpkm) / overall_sample, 
+            overall_average_relative_abundance = sum(type_relative_abundance) / overall_sample)
+```
+In the summary table:
+normalized_type_rpkm: sum of rpkm values of genes belonging to this defense type;
+normalized_type_rpkm_sum: sum of all "normalized_type_rpkm" in the same sample;
+type_relative_abundance: normalized_type_rpkm / normalized_type_rpkm_sum (relative abundance of this type in the sample);
+average_normalized_type_rpkm: average "type_relative_abundance" across all samples of this subject (because the analysis was done primarily for each subject);
+average_relative_abundance: average "type_relative_abundance" across all samples of this subject(because the analysis was done primarily for each subject).
+
+### calculate the average rpkm across all subjects' samples of MGX.
+```{r}
+type_summary_rpkm <- type_summary[, c(2, 3, 4, 7, 1, 5, 6)]
+type_summary_rpkm_spread <- type_summary_rpkm %>% spread(key = type, value = normalized_type_rpkm, fill = 0)
+type_summary_rpkm <- type_summary_rpkm_spread %>% 
+  gather(key = "type", value = "normalized_type_rpkm", colnames(type_summary_rpkm_spread)[6:ncol(type_summary_rpkm_spread)])
+type_summary_rpkm <- left_join(type_summary_rpkm, type_summary[, -6], 
+                               by = c("sample", "subject", "time_point", "time_point_num", "type", "normalized_type_rpkm_sum"))
+type_summary_rpkm <- left_join(type_summary_rpkm, overall_type_abundances, by = "type")
+
+MGX_type_abundances_violin <- type_summary_rpkm %>% filter(overall_average_normalized_type_rpkm >= 2e+1) %>% 
+  ggplot(aes(y = reorder(type, overall_average_normalized_type_rpkm), x = normalized_type_rpkm)) + 
+  # stat_boxplot(geom = "errorbar", width = 0.15) +
+  # geom_boxplot(outlier.alpha = 0, width = 0.8) +
+  geom_violin(scale = "width") +
+  geom_point(aes(fill = as.character(subject)), shape = 21, position = position_jitter(width = 0.1), alpha = 0.3) +
+  geom_point(aes(x = overall_average_normalized_type_rpkm), shape = 25, fill = "red", color = "red") +
+  scale_x_log10(breaks = c(0.1, 1, 10, 100, 1000)) +
+  scale_fill_manual(values = color_53[2:53]) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(face = "bold")) + 
+  theme(legend.position = "None") + 
+  theme(axis.line = element_line(colour = "#000000")) +
+  theme(axis.ticks = element_line(color = "#000000")) + 
+  labs(y = "Top abundant defense system types (average RPKM >= 20)", 
+       x = "RPKM of corresponding defense system type in samples")
+# "~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9-1.MGX_type_abundances_violin"
+MGX_type_abundances_violin
+
+MGX_type_abundances_heatmap <- type_summary_rpkm %>% filter(overall_average_normalized_type_rpkm >= 2e+1) %>% 
+  ggplot(aes(y = reorder(type, overall_average_normalized_type_rpkm), x = as.character(subject))) + 
+  geom_raster(aes(fill = log10(average_normalized_type_rpkm))) + 
+  coord_fixed() +
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 1, na.value = "#f0f0f0") +
+  labs(y = "", x = "Subject", fill = "log10(RPKM of corresponding defense system type in samples)") + 
+  theme_minimal() + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.ticks = element_line(colour = "#000000")) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+# "~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9-1.MGX_type_abundances_heatmap"
+MGX_type_abundances_heatmap
+
+type_summary_rpkm <- type_summary_rpkm %>% mutate(legend_average_rpkm = case_when(
+  average_normalized_type_rpkm >= 50 ~ type,
+  average_normalized_type_rpkm < 50 ~ " others"
+))
+n_distinct(type_summary_rpkm$legend_average_rpkm)
+
+MGX_sample_type_abundances_column <- type_summary_rpkm %>% drop_na() %>% 
+  ggplot(aes(x = as.character.numeric_version(time_point_num), y = normalized_type_rpkm)) + 
+  geom_col(aes(fill = legend_average_rpkm)) + 
+  facet_wrap(.~subject, nrow = 3, scales = "free") + 
+  scale_fill_manual(values = color_53) + 
+  theme_bw() + 
+  theme(legend.position = "top") +
+  guides(fill = guide_legend(nrow = 2, keywidth = 1, keyheight = 1, label.theme = element_text(size = 7))) + 
+  theme(axis.text.x = element_text(size = 5), 
+        axis.text.y = element_text(size = 6)) +
+  labs(x = "Time point", 
+       y = "RPKM of defense system types in samples", 
+       fill = "Types of defense systems")
+MGX_sample_type_abundances_column
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9_MGX_type_rpkm.pdf", width = 20, height = 15)
+print(MGX_type_abundances_violin)
+print(MGX_type_abundances_heatmap)
+print(MGX_sample_type_abundances_column)
+dev.off()
+```
+
+### calculate the average relative_abundance across all subjects' samples of MGX.
+```{r}
+type_summary_relaAbund <- type_summary[, c(2, 3, 4, 1, 5, 8)]
+type_summary_relaAbund_spread <- type_summary_relaAbund %>% spread(key = type, value = type_relative_abundance, fill = 0)
+type_summary_relaAbund <- type_summary_relaAbund_spread %>% 
+  gather(key = "type", value = "type_relative_abundance", colnames(type_summary_relaAbund_spread)[5:ncol(type_summary_relaAbund_spread)])
+type_summary_relaAbund <- left_join(type_summary_relaAbund, type_summary[, -c(6:9)], 
+                                    by = c("sample", "subject", "time_point", "time_point_num", "type"))
+type_summary_relaAbund <- left_join(type_summary_relaAbund, overall_type_abundances, by = "type")
+
+MGX_type_relaAbund_boxplot <- type_summary_relaAbund %>% filter(overall_average_relative_abundance >= 0.01) %>% 
+  ggplot(aes(x = reorder(type, -overall_average_relative_abundance), y = type_relative_abundance * 100)) + 
+  stat_boxplot(geom = "errorbar", width = 0.15) +
+  geom_boxplot(outlier.alpha = 0) + 
+  geom_point(aes(fill = as.character(subject)), shape = 21, alpha = 0.3, position = position_jitter(width = 0.2)) + 
+  geom_point(aes(y = overall_average_relative_abundance * 100), shape = 25, color = "red", fill = "red") + 
+  labs(x = "Top abundant defense system types (average relative abundance >= 1%)", 
+       y = "Relative abundance of corresponding defense system type in samples") + 
+  scale_y_continuous(breaks = c(0, 1, 10, 20, 30, 40, 50, 60)) + 
+  theme_minimal() + 
+  theme(legend.position = "None") + 
+  theme(axis.text.x = element_text(face = "bold", angle = 30, hjust = 1, vjust = 1)) + 
+  theme(axis.line = element_line(colour = "black")) + 
+  theme(axis.ticks = element_line(color = "black"))
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9_MGX_type_relative_abundance.pdf", paper = "a4")
+MGX_type_relaAbund_boxplot
+dev.off()
+```
+
+## read the type summary table of MTX
+```{r}
+MTX_type_summary <- read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/total_MTX_defense_type_summary.txt", 
+                               sep = "\t", header = T)
+
+MTX_overall_sample <- n_distinct(MTX_type_summary$sample)
+MTX_overall_type_abundances <- MTX_type_summary %>% group_by(type) %>% 
+  summarize(overall_average_normalized_type_rpkm = sum(normalized_type_rpkm) / MTX_overall_sample, 
+            overall_average_normalized_type_tpm = sum(normalized_type_tpm) / MTX_overall_sample, 
+            overall_average_relative_abundance = sum(type_realtive_abundance_rpkm) / MTX_overall_sample)
+```
+In the MTX_type_summary table;
+normalized_type_rpkm: sum of rpkm values of genes belonging to this defense type;
+normalized_type_tpm: sum of tpm values of genes belonging to this defense type;
+normalized_type_rpkm_sum: sum of all "normalized_type_rpkm" in the same sample;
+normalized_type_tpm_sum: sum of all "normalized_type_tpm" in the same sample;
+type_relative_abundance_rpkm: normalized_type_rpkm / normalized_type_rpkm_sum (relative abundance of this type in the sample);
+type_relative_abundance_tpm: normalized_type_tpm / normalized_type_tpm_sum (relative abundance of this type in the sample); 
+  p.s. relative abundance values calculated with rpkm and tpm are the same, so following values of "relative_abundances" are based on     
+    "type_relative_abundance_rpkm"
+average_normalized_type_rpkm: average "normalized_type_rpkm" across all samples of this subject (because the analysis was done primarily for each subject);
+average_normalized_type_tpm: average "normalized_type_tpm" across all samples of this subject (because the analysis was done primarily for each subject);
+average_relative_abundance: average "type_relative_abundance_rpkm" across all samples of this subject(because the analysis was done primarily for each subject).
+
+### calculate the average rpkm across all subjects' samples of MTX.
+```{r}
+MTX_type_summary_rpkm <- MTX_type_summary[, c(1:5, 9, 11)]
+MTX_type_summary_rpkm_spread <- MTX_type_summary_rpkm %>% spread(key = type, value = normalized_type_rpkm, fill = 0)
+MTX_type_summary_rpkm <- MTX_type_summary_rpkm_spread %>% gather(key = "type", value = "normalized_type_rpkm", 
+                                                                 colnames(MTX_type_summary_rpkm_spread)[6:ncol(MTX_type_summary_rpkm_spread)])
+MTX_type_summary_rpkm <- left_join(MTX_type_summary_rpkm, MTX_type_summary[, c(1:5, 15)], 
+                                   by = c("sample", "subject", "time_point", "time_point_num", "type"))
+MTX_type_summary_rpkm[is.na(MTX_type_summary_rpkm)] <- 0
+MTX_type_summary_rpkm <- left_join(MTX_type_summary_rpkm, MTX_overall_type_abundances[, c(1, 2)], by = "type")
+
+MTX_type_rpkm_violin <- MTX_type_summary_rpkm %>% filter(overall_average_normalized_type_rpkm >= 1e+1) %>% 
+  ggplot(aes(y = reorder(type, overall_average_normalized_type_rpkm), x = normalized_type_rpkm)) + 
+  geom_violin(scale = "width") +
+  geom_point(aes(fill = as.character(subject)), shape = 21, alpha = 0.5, position = position_jitter(width = 0.05)) + 
+  geom_point(aes(x = overall_average_normalized_type_rpkm), shape = 25, fill = "red", color = "red") +
+  scale_x_log10(breaks = c(1, 10, 100, 1000, 10000)) + 
+  scale_fill_manual(values = color_53[2:53]) +
+  theme_minimal() + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.line = element_line(color = "black")) + 
+  theme(axis.ticks = element_line(color = "black")) +
+  theme(legend.position = "None") + 
+  labs(y = "Top abundant defense system types in metatranscriptome (average RPKM >= 10)", 
+       x = "RPKM of corresponding defense system type in samples")
+MTX_type_rpkm_violin
+
+MTX_type_rpkm_heatmap <- MTX_type_summary_rpkm %>% filter(overall_average_normalized_type_rpkm >= 1e+1) %>% 
+  ggplot(aes(x = as.character(subject), y = reorder(type, overall_average_normalized_type_rpkm))) + 
+  geom_raster(aes(fill = log10(average_normalized_type_rpkm))) + 
+  coord_fixed() +
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 1, na.value = "#f0f0f0")+
+  labs(y = "", x = "Subject", fill = "log10(RPKM of corresponding defense system type in samples)") + 
+  theme_minimal() + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.ticks = element_line(colour = "#000000")) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+MTX_type_rpkm_heatmap
+
+MTX_type_summary_rpkm <- MTX_type_summary_rpkm %>% mutate(legend_average_rpkm = case_when(
+  average_normalized_type_rpkm >= 20 ~ type,
+  average_normalized_type_rpkm < 20 ~ " others"
+))
+n_distinct(MTX_type_summary_rpkm$legend_average_rpkm)
+MTX_sample_type_abundances_rpkm_column <- MTX_type_summary_rpkm %>% ggplot(aes(x = as.character.numeric_version(time_point_num), 
+                                     y = normalized_type_rpkm)) + 
+  geom_col(aes(fill = legend_average_rpkm), width = 0.8) + 
+  facet_wrap(.~subject, nrow = 3, scales = "free", ) + 
+  scale_fill_manual(values = color_53) + 
+  guides(fill = guide_legend(ncol = 1)) + 
+  theme_bw() +
+  theme(legend.position = "top") +
+  guides(fill = guide_legend(nrow = 2, keywidth = 1, keyheight = 1, label.theme = element_text(size = 7))) + 
+  theme(legend.key.width = unit(0.4, "cm"), 
+        legend.key.height = unit(0.4, "cm"), 
+        legend.text = element_text(size = 6)) + 
+  theme(panel.spacing = unit(0.05, "cm")) + 
+  theme(axis.text.y = element_text(face = "bold", size = 6), 
+        axis.text.x = element_text(hjust = 0.5, size = 4.5, face = "bold"))
+MTX_sample_type_abundances_rpkm_column
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9_MTX_type_rpkm.pdf", width = 20, height = 15)
+print(MTX_type_rpkm_violin)
+print(MTX_type_rpkm_heatmap)
+print(MTX_sample_type_abundances_rpkm_column)
+dev.off()
+```
+
+### calculate the average tpm across all subjects' samples of MTX.
+```{r}
+MTX_type_summary_tpm <- MTX_type_summary[, c(1:5, 10, 12)]
+MTX_type_summary_tpm_spread <- MTX_type_summary_tpm %>% spread(key = type, value = normalized_type_tpm, fill = 0)
+MTX_type_summary_tpm <- MTX_type_summary_tpm_spread %>% gather(key = "type", value = "normalized_type_tpm", 
+                                                                 colnames(MTX_type_summary_tpm_spread)[6:ncol(MTX_type_summary_tpm_spread)])
+MTX_type_summary_tpm <- left_join(MTX_type_summary_tpm, MTX_type_summary[, c(1:5, 16)], 
+                                   by = c("sample", "subject", "time_point", "time_point_num", "type"))
+MTX_type_summary_tpm[is.na(MTX_type_summary_tpm)] <- 0
+MTX_type_summary_tpm <- left_join(MTX_type_summary_tpm, MTX_overall_type_abundances[, c(1, 3)], by = "type")
+
+MTX_type_tpm_violin <- MTX_type_summary_tpm %>% filter(overall_average_normalized_type_tpm >= 5) %>% 
+  ggplot(aes(y = reorder(type, overall_average_normalized_type_tpm), x = normalized_type_tpm)) + 
+  geom_violin(scale = "width") +
+  geom_point(aes(fill = as.character(subject)), shape = 21, alpha = 0.5, position = position_jitter(width = 0.05)) + 
+  geom_point(aes(x = overall_average_normalized_type_tpm), shape = 25, fill = "red", color = "red") +
+  scale_x_log10(breaks = c(1, 10, 100, 1000, 10000)) + 
+  scale_fill_manual(values = color_53[2:53]) +
+  theme_minimal() + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.line = element_line(color = "black")) + 
+  theme(axis.ticks = element_line(color = "black")) +
+  theme(legend.position = "None") + 
+  labs(y = "Top abundant defense system types in metatranscriptome (average TPM >= 5)", 
+       x = "TPM of corresponding defense system type in samples")
+MTX_type_tpm_violin
+
+MTX_type_tpm_heatmap <- MTX_type_summary_tpm %>% filter(overall_average_normalized_type_tpm >= 5) %>% 
+  ggplot(aes(x = as.character(subject), y = reorder(type, overall_average_normalized_type_tpm))) + 
+  geom_raster(aes(fill = log10(average_normalized_type_tpm))) + 
+  coord_fixed() +
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 1, na.value = "#f0f0f0")+
+  labs(y = "", x = "Subject", fill = "log10(TPM of corresponding defense system type in samples)") + 
+  theme_minimal() + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.ticks = element_line(colour = "#000000")) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+MTX_type_tpm_heatmap
+
+
+MTX_type_summary_tpm <- MTX_type_summary_tpm %>% mutate(legend_average_tpm = case_when(
+  average_normalized_type_tpm >= 10 ~ type,
+  average_normalized_type_tpm < 10 ~ " others"
+))
+n_distinct(MTX_type_summary_tpm$legend_average_tpm)
+MTX_sample_type_abundances_tpm_column <- MTX_type_summary_tpm %>% ggplot(aes(x = as.character.numeric_version(time_point_num), 
+                                     y = normalized_type_tpm)) + 
+  geom_col(aes(fill = legend_average_tpm), width = 0.8) + 
+  facet_wrap(.~subject, nrow = 3, scales = "free", ) + 
+  scale_fill_manual(values = color_53) + 
+  guides(fill = guide_legend(ncol = 1)) + 
+  theme_bw() +
+  theme(legend.position = "top") +
+  guides(fill = guide_legend(nrow = 2, keywidth = 1, keyheight = 1, label.theme = element_text(size = 7))) + 
+  theme(legend.key.width = unit(0.4, "cm"), 
+        legend.key.height = unit(0.4, "cm"), 
+        legend.text = element_text(size = 6)) + 
+  theme(panel.spacing = unit(0.05, "cm")) + 
+  theme(axis.text.y = element_text(face = "bold", size = 6), 
+        axis.text.x = element_text(hjust = 0.5, size = 4.5, face = "bold"))
+MTX_sample_type_abundances_tpm_column
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9_MTX_type_tpm.pdf", width = 20, height = 15)
+print(MTX_type_tpm_violin)
+print(MTX_type_tpm_heatmap)
+print(MTX_sample_type_abundances_tpm_column)
+dev.off()
+```
+
+## compare the abundances of different systems in MGX and MTX.
+### merge the tables of defense type summary according to RPKM from MGX/MTX datasets.
+```{r}
+MGX_rpkm_for_merging <- type_summary_rpkm[, c(1, 2, 3, 5, 6, 4, 7, 9, 11)]
+MGX_rpkm_for_merging$data_type <- "MGX"
+
+MTX_rpkm_for_merging <- MTX_type_summary_rpkm[, c(2, 3, 4, 1, 6, 5, 7, 8, 9)]
+MTX_rpkm_for_merging$data_type <- "MTX"
+
+merged_type_summary_rpkm <- rbind(MGX_rpkm_for_merging, MTX_rpkm_for_merging)
+```
+
+### define the top abundant types of defense systems in MGX and/or MTX for comparison.
+```{r}
+top_types <- unique(c(unique(type_summary_rpkm[type_summary_rpkm$overall_average_normalized_type_rpkm >= 2e+1, "type"]), 
+                      unique(MTX_type_summary_rpkm[MTX_type_summary_rpkm$overall_average_normalized_type_rpkm >= 1e+1, "type"])))
+```
+
+### compare the RPKM of the top abundant defense system types in MGX/MTX.
+```{r}
+MGX_MTX_rpkm_comparison <- merged_type_summary_rpkm %>% filter(type %in% top_types) %>% ggplot(aes(x = data_type, y = normalized_type_rpkm)) + 
+  facet_wrap(.~ reorder(type, -overall_average_normalized_type_rpkm), nrow = 5, scales = "free") + 
+  geom_boxplot(outlier.alpha = 0) + 
+  stat_boxplot(geom = "errorbar", width = 0.15) +
+  geom_point(aes(fill = as.character(subject)), shape = 21, alpha = 0.5, position = position_jitter(width = 0.1)) +
+  geom_point(aes(y = overall_average_normalized_type_rpkm), shape = 25, color = "red", fill = "red") +
+  scale_fill_manual(values = color_53) + 
+  # scale_y_log10(breaks = c(0.1, 1, 10, 100, 1000)) +
+  theme(legend.position = "None")
+
+MGX_MTX_reAbund_comparison <- merged_type_summary_rpkm %>% filter(type %in% top_types) %>% ggplot(aes(x = data_type, y = normalized_type_rpkm/normalized_type_rpkm_sum*100)) + 
+  facet_wrap(.~ reorder(type, -overall_average_normalized_type_rpkm), nrow = 5, scales = "free") + 
+  geom_boxplot(outlier.alpha = 0) + 
+  stat_boxplot(geom = "errorbar", width = 0.15) +
+  geom_point(aes(fill = as.character(subject)), shape = 21, alpha = 0.5, position = position_jitter(width = 0.1)) +
+  scale_fill_manual(values = color_53) + 
+  theme(legend.position = "None")
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9_MGX_MTX_comparison.pdf", width = 20, height = 15)
+print(MGX_MTX_rpkm_comparison)
+print(MGX_MTX_reAbund_comparison)
+dev.off()
+```
+
+
+# analyze the alpha/beta diversity of defense repertoire in MGX/MTX.
+## analyze alpha diversity
+
+### calculate the Shannon diversity index of each sample in MGX/MTX.
+```{r}
+MGX_shannon <- type_summary_rpkm %>% filter(normalized_type_rpkm != 0)
+MGX_shannon <- MGX_shannon %>%
+  group_by(subject, time_point, time_point_num, sample) %>% 
+  summarize(Shannon = sum(-1 * type_relative_abundance * log(type_relative_abundance)))
+MGX_shannon$data_type <- "MGX"
+
+MTX_shannon <- MTX_type_summary_rpkm %>% filter(normalized_type_rpkm != 0)
+MTX_shannon$type_relative_abundance <- MTX_shannon$normalized_type_rpkm / MTX_shannon$normalized_type_rpkm_sum
+MTX_shannon <- MTX_shannon %>%
+  group_by(subject, time_point, time_point_num, sample) %>% 
+  summarize(Shannon = sum(-1 * type_relative_abundance * log(type_relative_abundance)))
+MTX_shannon$data_type <- "MTX"
+
+merged_shannon <- rbind(MGX_shannon, MTX_shannon)
+shannon_comparison <- 
+  merged_shannon %>% ggplot(aes(x = data_type, y = Shannon)) + 
+  geom_boxplot(aes(color = data_type), outlier.alpha = 0, width = 0.5, lwd = 0.8) + 
+  stat_boxplot(aes(color = data_type), geom = "errorbar", width = 0.15) +  
+  geom_point(aes(fill = as.character(subject)), shape = 21, size = 1.5, alpha = 0.6, position = position_jitter(width = 0.05)) +  
+  scale_color_manual(values = c("#31a354", "#e9a3c9")) +
+  scale_fill_manual(values = color_53) +
+  scale_y_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3)) +
+  theme_bw() +
+  theme(legend.position = "None") + 
+  labs(x = "", y = "Shannon Diversity Index") + 
+  theme(axis.text = element_text(face = "bold", size = 10),
+        axis.title = element_text(face = "bold"))
+shannon_comparison
+
+merged_shannon_paired <- merged_shannon[, -4] %>% spread(key = data_type, value = Shannon) %>% drop_na()
+paired_shannon_ttest <- t.test(merged_shannon_paired$MGX, merged_shannon_paired$MTX, paired = T)
+merged_shannon_paired <- merged_shannon_paired %>% gather(key = "data_type", value = "Shannon", "MGX", "MTX")
+merged_shannon_paired$sample <- paste(merged_shannon_paired$subject, merged_shannon_paired$time_point, sep = "_")
+paired_shannon_comparison <- 
+  merged_shannon_paired %>% ggplot(aes(x = data_type, y = Shannon)) + 
+  geom_boxplot(aes(color = data_type), outlier.alpha = 0, width = 0.5, lwd = 0.8) + 
+  stat_boxplot(aes(color = data_type), geom = "errorbar", width = 0.15) + 
+  geom_line(aes(group = sample), color = "#bdbdbd", alpha = 0.4, position = position_dodge(width = 0.1)) +
+  geom_point(aes(fill = as.character(subject)), shape = 21, size = 1.5, alpha = 0.6, position = position_dodge(width = 0.1)) + 
+  scale_fill_manual(values = color_53) + 
+  scale_y_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3)) +
+  scale_color_manual(values = c("#31a354", "#e9a3c9")) +
+  theme_bw() +
+  theme(legend.position = "None") + 
+  labs(x = "", y = "Shannon Diversity Index") + 
+  theme(axis.text = element_text(face = "bold", size = 10),
+        axis.title = element_text(face = "bold"))
+paired_shannon_comparison
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9_MGX_MTX_shannon_index_comparison.pdf", 
+    width = 7.5, height = 10)
+print(shannon_comparison)
+print(paired_shannon_comparison)
+dev.off()
+```
+
+### calculate the Simpson diversity index (1-D) of each sample in MGX/MTX
+Simpson index (D) = Σn(n-1) / N(N-1)
+Simpson diversity index = 1 - D
+```{r}
+MGX_simpson <- type_summary_rpkm %>% group_by(subject, time_point, time_point_num, sample, normalized_type_rpkm_sum) %>% 
+  summarize(Simpson = 1 - sum(normalized_type_rpkm * (normalized_type_rpkm - 1) / normalized_type_rpkm_sum / (normalized_type_rpkm_sum - 1)))
+MGX_simpson$data_type <- "MGX"
+
+MTX_simpson <- MTX_type_summary_rpkm %>% group_by(subject, time_point, time_point_num, sample, normalized_type_rpkm_sum) %>% 
+  summarize(Simpson = 1 - sum(normalized_type_rpkm * (normalized_type_rpkm - 1) / normalized_type_rpkm_sum / (normalized_type_rpkm_sum - 1)))
+MTX_simpson$data_type <- "MTX"
+
+merged_simpson <- rbind(MGX_simpson, MTX_simpson)
+merged_simpson %>% ggplot(aes(x = data_type, y = Simpson)) + 
+  geom_boxplot(outlier.alpha = 0, width = 0.5) + 
+  stat_boxplot(geom = "errorbar", width = 0.15) +  
+  geom_point(aes(fill = as.character(subject)), shape = 21, size = 2, alpha = 0.6, position = position_jitter(width = 0.05)) +  
+  scale_fill_manual(values = color_53) +
+  scale_y_continuous(breaks = c(0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)) +
+  theme_bw() +
+  theme(legend.position = "None") + 
+  labs(x = "", y = "Simpson Diversity Index")
+
+merged_simpson_paired <- merged_simpson[, -c(4, 5)] %>% spread(key = data_type, value = Simpson) %>% drop_na()
+paired_simpson_ttest <- t.test(merged_simpson_paired$MGX, merged_simpson_paired$MTX, paired = T)
+merged_simpson_paired <- merged_simpson_paired %>% gather(key = "data_type", value = "Simpson", "MGX", "MTX")
+merged_simpson_paired$sample <- paste(merged_simpson_paired$subject, merged_simpson_paired$time_point, sep = "_")
+merged_simpson_paired %>% ggplot(aes(x = data_type, y = Simpson)) + 
+  geom_boxplot(outlier.alpha = 0, width = 0.5) + 
+  stat_boxplot(geom = "errorbar", width = 0.15) + 
+  geom_line(aes(group = sample), color = "#bdbdbd", alpha = 0.4, position = position_dodge(width = 0.1)) +
+  geom_point(aes(fill = as.character(subject)), shape = 21, size = 2, alpha = 0.6, position = position_dodge(width = 0.1)) + 
+  scale_fill_manual(values = color_53) + 
+  # scale_y_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3)) +
+  theme_bw() +
+  theme(legend.position = "None") + 
+  labs(x = "Data type", y = "Simpson Diversity Index")
+
+
+```
+
+## analyze beta diversity
+
+### example of bray curtis distances code
+```{r}
+abundance_matrix <- matrix(c(10, 5, 3, 0, 15, 8, 7, 2, 20, 10, 5, 1), ncol = 3, byrow = TRUE)
+rownames(abundance_matrix) <- c("Sample1", "Sample2", "Sample3", "Sample4")
+bray_curtis_distances <- vegdist(abundance_matrix, method = "bray")
+bc_distances <- as.matrix(bray_curtis_distances)
+```
+
+### BC distances of MGX/MTX
+```{r}
+# Bray-Curtis distances between MGX samples
+MGX_bc <- type_summary_rpkm[, c(1, 2, 6, 7)] %>% spread(key = type, value = normalized_type_rpkm)
+MGX_bc$sample <- paste(as.character(MGX_bc$subject), MGX_bc$time_point, sep = "_")
+colnames(MGX_bc)
+MGX_bc_matrix <- as.matrix(MGX_bc[, -c(1, 2, 121)])
+rownames(MGX_bc_matrix) <- MGX_bc$sample
+
+MGX_bc_distances <- vegdist(MGX_bc_matrix, method = "bray")
+MGX_bc_distances <- as.matrix(MGX_bc_distances)
+MGX_bc_distances <- as.data.frame(MGX_bc_distances)
+
+MGX_bc_distances$sample1 <- row.names(MGX_bc_distances)
+MGX_bc_distances <- MGX_bc_distances %>% gather(key = "sample2", value = "bc_distance", colnames(MGX_bc_distances)[1:414])
+MGX_bc_distances <- separate(MGX_bc_distances, col = sample1, sep = "_", into = c("subject_1", "timepoint_1"))
+MGX_bc_distances <- separate(MGX_bc_distances, col = sample2, sep = "_", into = c("subject_2", "timepoint_2"))
+MGX_bc_distances <- MGX_bc_distances %>% mutate(sample_source = case_when(
+  subject_1 != subject_2 ~ "inter-subject", 
+  subject_1 == subject_2 & timepoint_1 != timepoint_2 ~ "intra-subject",
+  subject_1 == subject_2 & timepoint_1 == timepoint_2 ~ "same"
+))
+MGX_bc_distances$sample_source <- factor(MGX_bc_distances$sample_source, levels = c("intra-subject", "inter-subject", "same"))
+MGX_bc_distances %>% filter(sample_source != "same") %>% 
+  ggplot(aes(x = sample_source, y = bc_distance)) + 
+  geom_violin() +
+  # stat_boxplot(geom = "errorbar", width = 0.1) + 
+  geom_boxplot(width = 0.3, outlier.alpha = 0.1) +
+  theme_bw()
+MGX_bc_wilcoxtest <- wilcox.test(MGX_bc_distances[MGX_bc_distances$sample_source == "intra-subject", "bc_distance"], 
+                                 MGX_bc_distances[MGX_bc_distances$sample_source == "inter-subject", "bc_distance"])
+MGX_bc_wilcoxtest
+
+# Bray-Curtis distances between MTX samples
+MTX_bc <- MTX_type_summary_rpkm[, c(2, 3, 6, 7)] %>% spread(key = type, value = normalized_type_rpkm)
+MTX_bc$sample <- paste(as.character(MTX_bc$subject), MTX_bc$time_point, sep = "_")
+colnames(MGX_bc)
+MTX_bc_matrix <- as.matrix(MTX_bc[, -c(1, 2, 121)])
+rownames(MTX_bc_matrix) <- MTX_bc$sample
+
+MTX_bc_distances <- vegdist(MTX_bc_matrix, method = "bray")
+MTX_bc_distances <- as.data.frame(as.matrix(MTX_bc_distances))
+
+MTX_bc_distances$sample1 <- row.names(MTX_bc_distances)
+MTX_bc_distances <-  MTX_bc_distances %>% gather(key = "sample2", value = "bc_distance", colnames(MTX_bc_distances)[1:200])
+MTX_bc_distances <- separate(MTX_bc_distances, col = sample1, sep = "_", into = c("subject_1", "timepoint_1"))
+MTX_bc_distances <- separate(MTX_bc_distances, col = sample2, sep = "_", into = c("subject_2", "timepoint_2"))
+MTX_bc_distances <- MTX_bc_distances %>% mutate(sample_source = case_when(
+  subject_1 != subject_2 ~ "inter-subject", 
+  subject_1 == subject_2 & timepoint_1 != timepoint_2 ~ "intra-subject",
+  subject_1 == subject_2 & timepoint_1 == timepoint_2 ~ "same"
+))
+MTX_bc_distances$sample_source <- factor(MTX_bc_distances$sample_source, levels = c("intra-subject", "inter-subject", "same"))
+MTX_bc_distances %>% filter(sample_source != "same") %>% 
+  ggplot(aes(x = sample_source, y = bc_distance)) + 
+  geom_violin() +
+  # stat_boxplot(geom = "errorbar", width = 0.1) + 
+  geom_boxplot(width = 0.3, outlier.alpha = 0.1) +
+  theme_bw()
+
+MTX_bc_wilcoxtest <- wilcox.test(MTX_bc_distances[MTX_bc_distances$sample_source == "intra-subject", "bc_distance"], 
+                                 MTX_bc_distances[MTX_bc_distances$sample_source == "inter-subject", "bc_distance"])
+MTX_bc_wilcoxtest
+
+# Bray Curtis distances of both MGX/MTX samples
+MGX_bc_distances$data_type <- "MGX"
+MTX_bc_distances$data_type <- "MTX"
+merged_bc_distances <- rbind(MGX_bc_distances, MTX_bc_distances)
+merged_bc_distances$sample_source_with_data_type <- paste(merged_bc_distances$data_type, merged_bc_distances$sample_source, sep = "_")
+merged_bc_distances$sample_source_with_data_type <- factor(merged_bc_distances$sample_source_with_data_type, levels = 
+                                                             c("MGX_intra-subject", "MGX_inter-subject", "MGX_same", 
+                                                               "MTX_intra-subject", "MTX_inter-subject", "MTX_same"))
+merged_bc_distances_comparison <- merged_bc_distances %>% filter(sample_source != "same") %>% 
+  ggplot(aes(x = sample_source_with_data_type, y = bc_distance)) + 
+  geom_violin(aes(color = data_type), lwd = 1) +
+  # stat_boxplot(geom = "errorbar", width = 0.1) + 
+  geom_boxplot(aes(color = data_type), width = 0.1, outlier.alpha = 0.1, outlier.size = 1, lwd = 0.8) +
+  theme_bw() + 
+  scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1)) + 
+  scale_color_manual(values = c("#31a354", "#e9a3c9")) + 
+  labs(x = "", y = "Bray-Curtis Distances between Two Samples' Defense Repertoire") + 
+  theme(legend.position = "None") + 
+  theme(axis.text = element_text(face = "bold", size = 10),
+        axis.title = element_text(face = "bold"))
+
+pdf("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_merged_stat/16-9_MGX_MTX_bray-curtis_distance_comparison.pdf", width = 15,
+    height = 10)
+print(merged_bc_distances_comparison)
+dev.off()
+```
+

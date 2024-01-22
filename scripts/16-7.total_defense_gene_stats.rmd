@@ -47,7 +47,7 @@ color_44 <- c("#bdbdbd", "#F135CC", "#E1E4CF", "#A7AFDF", "#E596E2", "#86EB2D", 
               "#CD2FED", "#894BDB", "#C89A61", "#69E7E7", "#E7AFDA", "#DDEA4E", 
               "#6B9B4F", "#837F84", "#633BEE", "#D47497", "#E6A637", "#bdbdbd", 
               "#737373")
-color_53 <- c("#bdbdbd", distinctColorPalette(52))
+# color_53 <- c("#bdbdbd", distinctColorPalette(52))
 ```
 
 ### set the input file and output file/figure paths
