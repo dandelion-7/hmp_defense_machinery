@@ -36,7 +36,7 @@ do
 		bowtie2_out=${OUTPUT_BOWTIE2_DIR}/${sample}_bowtie2_out.txt
 
 		cd ${OUTPUT_MPA_DIR}
-		metaphlan ${pe1},${pe2} --input_type fastq --bowtie2out ${bowtie2_out} -o ${mpa_out} --bowtie2db ${BOWTIE2_DB} --nproc 32
+		#metaphlan ${pe1},${pe2} --input_type fastq --bowtie2out ${bowtie2_out} -o ${mpa_out} --bowtie2db ${BOWTIE2_DB} --nproc 32
 		# If multiple files are input for metaphlan, they need to be sparated with ",", otherwise the following file will be re-written as the output.
 		cat ${mpa_out} | sed '1,5d' | awk '{print $1"\t"$2"\t"$3}' | sed -e 's/|/,/g' -e 's/ //g' | sed "s/$/&\t${sample}/g" >> ${OUTPUT_MPA_DIR}/total_output.txt
 

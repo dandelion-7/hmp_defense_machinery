@@ -1,0 +1,183 @@
+---
+title: "19-3.sample_taxonomic_composition_mpa"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# load libraries and set paths
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(randomcoloR)
+
+color_53 <- as.array(read.delim("~/crisprome/hmp/scripts/color_53.txt", header = F, sep = "\t")[, 1])
+```
+
+
+# Summarize the taxonomic composition of the whole microbiome with MGX data.
+
+## Read the output list from metaphlan
+```{r}
+total_taxonomy <- read.delim("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa/total_output.txt", header = F, sep = "\t")
+colnames(total_taxonomy) <- c("taxon", "taxid", "relative_abundance", "sample")
+
+taxon <- as.data.frame(total_taxonomy$taxon)
+taxon <- separate(taxon, col = `total_taxonomy$taxon`, sep = ",", into = c("kingdom", "phylum", "class", "order", "family", "genus", "species"))
+total_taxonomy <- cbind(total_taxonomy, taxon)
+
+taxid <- as.data.frame(total_taxonomy$taxid)
+taxid <- separate(taxid, col = `total_taxonomy$taxid`, sep = ",", 
+                  into = c("kingdom_id", "phylum_id", "class_id", "order_id", "family_id", "genus_id", "species_id"))
+total_taxonomy <- cbind(total_taxonomy, taxid)
+
+sample <- as.data.frame(total_taxonomy$sample)
+sample <- separate(sample, col = `total_taxonomy$sample`, sep = "_", into = c("subject", "time_point", "hospital", "disease", "data_type"))
+sample$time_point <- as.numeric(str_remove_all(sample$time_point, "C"))
+sample$subject <- as.numeric(sample$subject)
+total_taxonomy <- cbind(total_taxonomy, sample)
+```
+
+## Convert the taxonomic nomenclatures into the new system.
+### Get all the taxid involved.
+```{r}
+total_taxid <- total_taxonomy[12:18] %>% gather(key = "level", value = "taxid")
+# total_taxid <- as.data.frame(as.numeric(unique(total_taxid$taxid))) %>% drop_na()
+total_taxid <- unique(total_taxid)
+total_taxid$taxid <- as.numeric(total_taxid$taxid)
+as.data.frame(as.numeric(unique(total_taxid$taxid))) %>% drop_na() %>%
+  write.table("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary/total_taxid.txt", sep = "\t",
+              col.names = F, row.names = F, quote = F)
+```
+### convert from taxid into new nomencalture.
+```{bash}
+cd ~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary
+source activate taxonkit
+taxonkit lineage total_taxid.txt --threads 8 | taxonkit reformat -f "{k}\t{p}\t{c}\t{o}\t{f}\t{g}\t{s}" -F -P --out-file total_taxon.txt
+```
+### summarize the taxid and new taxon.
+```{r}
+total_taxon <- read.delim("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary/total_taxon.txt", sep = "\t", header = F)
+colnames(total_taxon) <- c("taxid", "taxon", "kingdom", "phylum", "class", "order", "family", "genus", "species")
+total_taxon <- total_taxon[, -2]
+total_taxid_taxon <- right_join(total_taxid, total_taxon, by = "taxid")
+total_taxid_taxon <- total_taxid_taxon %>% mutate(taxon = case_when(
+  level == "kingdom_id" ~ kingdom, 
+  level == "phylum_id" ~ phylum,
+  level == "class_id" ~ class,
+  level == "order_id" ~ order,
+  level == "family_id" ~ family,
+  level == "genus_id" ~ genus,
+  level == "species_id" ~ species,
+))
+total_taxid_taxon <- total_taxid_taxon[, -c(3:9)]
+total_taxid_taxon %>% write.table("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary/taxid_taxon_table.txt",
+                                  sep = "\t", col.names = T, row.names = F, quote = F)
+```
+
+## summarize taxonomic composition at the phylum level
+```{r}
+total_taxid_taxon <- read.delim("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary/taxid_taxon_table.txt",
+                                sep = "\t", header = T)
+total_phylum <- total_taxonomy %>% filter(is.na(class) & !(is.na(phylum)))
+total_phylum <- total_phylum[, -c(1:2, 5, 7:11, 12, 14:18)]
+total_phylum$taxid <- as.numeric(total_phylum$phylum_id)
+total_phylum <- left_join(total_phylum, total_taxid_taxon[, 2:3], by = "taxid")
+colnames(total_phylum)[11] <- "phylum_new"
+total_phylum[is.na(total_phylum$phylum_new), 11] <- "unclassified"
+
+main_phyla <- c("p__Actinomycetota", "p__Bacillota", "p__Bacteroidota", "p__Pseudomonadota", "p__Verrucomicrobiota", "unclassified")
+total_phylum <- total_phylum %>% mutate(legend = case_when(
+  phylum_new %in% main_phyla ~ phylum_new, 
+  !(phylum_new %in% main_phyla) ~ "others"
+))
+total_phylum$legend <- factor(total_phylum$legend, levels = c("p__Actinomycetota", "p__Bacillota", "p__Bacteroidota", 
+                                                              "p__Pseudomonadota", "p__Verrucomicrobiota", "others", "unclassified"))
+
+color_7 <- c("#8CAED5","#D97B5F", "#D7D762","#7EE075", "#84E0D0", "#bdbdbd", "#737373")
+total_phylum %>% filter(data_type != "TR-MGX") %>% 
+  ggplot(aes(x = as.character.numeric_version(time_point), y = relative_abundance)) + 
+  geom_col(aes(fill = legend)) + 
+  facet_wrap(.~subject, nrow = 3, scales = "free_x") + 
+  scale_fill_manual(values = color_7) + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(size = 5, face = "bold"), axis.text.y = element_text(face = "bold")) + 
+  labs(x = "", y = "Relative abundances", fill = "")
+```
+
+## summarize taxonomic composition at the genus level
+```{r}
+total_taxid_taxon <- read.delim("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary/taxid_taxon_table.txt",
+                                sep = "\t", header = T)
+total_genus <- total_taxonomy %>% filter(is.na(species) & !(is.na(genus)))
+total_genus <- total_genus[, -c(1:2, 5:9, 11, 12:16, 18)]
+total_genus$taxid <- as.numeric(total_genus$genus_id)
+total_genus <- left_join(total_genus, total_taxid_taxon[, 2:3], by = "taxid")
+colnames(total_genus)[11] <- "genus_new"
+total_genus <- total_genus %>% mutate(genus_new = case_when(
+  str_detect(genus, "unclassified") ~ "unclassified", 
+  is.na(taxid) & !(str_detect(genus, "unclassified")) ~ genus,
+  !(is.na(taxid)) ~ genus_new
+))
+
+average_genus_abundance <- total_genus %>% group_by(genus_new) %>% 
+  summarize(average_genus_abundance = sum(relative_abundance) / n_distinct(total_genus$sample))
+average_genus_abundance <- arrange(average_genus_abundance, desc(average_genus_abundance))
+average_genus_abundance %>% 
+  write.table("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary/average_genus_abundances.txt", 
+              sep = "\t", col.names = T, row.names = F, quote = F)
+
+total_genus <- left_join(total_genus, average_genus_abundance, by = "genus_new")
+total_genus <- total_genus %>% mutate(legend_in_sample = case_when(
+  genus_new == "unclassified" ~ "unclassified",
+  str_detect(genus_new, "GGB") ~ "unnamed_genus",
+  relative_abundance >= 3 ~ genus_new,
+  relative_abundance < 3 ~ "others"
+))
+n_distinct(total_genus$legend_in_sample)
+total_genus <- total_genus %>% mutate(legend_in_average = case_when(
+  genus_new == "unclassified" ~ "unclassified",
+  average_genus_abundance >= 0.2 ~ genus_new,
+  average_genus_abundance < 0.2 ~ "others"
+))
+n_distinct(total_genus$legend_in_average)
+
+total_genus$legend_in_sample <- factor(total_genus$legend_in_sample, 
+                                       levels = c(sort(unique(total_genus$legend_in_sample))[1:52], "unnamed_genus", "others", "unclassified"))
+total_genus %>% filter(data_type != "TR-MGX") %>% 
+  ggplot(aes(x = as.character.numeric_version(time_point), y = relative_abundance)) + 
+  geom_col(aes(fill = legend_in_sample)) + 
+  facet_wrap(.~subject, nrow = 3, scales = "free_x") + 
+  scale_fill_manual(values = c(color_53[1:52],"#ffffff", "#bdbdbd", "#737373"))
+```
+
+## Select the genus with top abundancies.
+```{r}
+clear_genus <- average_genus_abundance %>% filter(!(str_detect(genus_new, "GGB")))
+top_genus <- as.array(clear_genus$genus_new[c(1:30)])
+```
+
