@@ -34,6 +34,7 @@ library(dplyr)
 library(tidyr)
 library(stringr)
 library(randomcoloR)
+library(zoo)
 
 getwd()
 setwd("~/crisprome/hmp/scripts")
@@ -255,34 +256,57 @@ MGX_phylum <- MGX_phylum %>% mutate(phylum = case_when(
   str_detect(mmseqs2_phylum, "p__") ~ mmseqs2_phylum
 ))
 
-phylum_rpkm_sum <- MGX_phylum %>% group_by(phylum, subject) %>% summarize(subject_phylum_rpkm_sum = sum(normalized_type_rpkm))
-MGX_phylum <- left_join(MGX_phylum, phylum_rpkm_sum, by = c("phylum", "subject"))
-MGX_phylum$relative_abundance_in_subject_phylum <- MGX_phylum$normalized_type_rpkm / MGX_phylum$subject_phylum_rpkm_sum
+MGX_phylum_rpkm_sum <- MGX_phylum %>% group_by(phylum) %>% 
+  summarize(phylum_rpkm_sum = sum(normalized_type_rpkm))
+MGX_type_phylum_rpkm_sum <- MGX_phylum %>% group_by(type, phylum) %>% 
+  summarize(type_phylum_rpkm_sum = sum(normalized_type_rpkm))
+MGX_type_phylum_abundances <- left_join(MGX_type_phylum_rpkm_sum, MGX_phylum_rpkm_sum, by = "phylum")
+MGX_type_phylum_abundances <- MGX_type_phylum_abundances %>% 
+  mutate(relative_abundance = type_phylum_rpkm_sum / phylum_rpkm_sum)
 
-average_relative_abundance <- MGX_phylum %>% group_by(type, phylum) %>% 
-  summarise(average_relative_abundance_in_subject_phylum = sum(relative_abundance_in_subject_phylum) / n_distinct(MGX_phylum$subject))
-average_relative_abundance_spread <- 
-  average_relative_abundance %>% spread(key = phylum, value = average_relative_abundance_in_subject_phylum, fill = 0)
-average_relative_abundance <- average_relative_abundance_spread %>% 
-  gather(key = "phylum", value = "average_relative_abundance_in_subject_phylum", colnames(average_relative_abundance_spread)[2:18])
+MGX_type_phylum_abundances_spread <- MGX_type_phylum_abundances[, c(1, 2, 5)] %>% 
+  spread(key = "phylum", value = "relative_abundance", fill = NA)
+MGX_type_phylum_abundances_filled <- MGX_type_phylum_abundances_spread %>% 
+  gather(key = "phylum", value = "relative_abundance", colnames(MGX_type_phylum_abundances_spread)[2:18])
 
 type_rpkm_sum <- MGX_phylum %>% group_by(type) %>% summarize(type_rpkm_sum = sum(normalized_type_rpkm))
-average_relative_abundance <- left_join(average_relative_abundance, type_rpkm_sum, by = "type")
+MGX_type_phylum_abundances_filled <- left_join(MGX_type_phylum_abundances_filled, type_rpkm_sum, by = "type")
 
-unique(average_relative_abundance$phylum)
 main_phyla <- c("p__Actinomycetota", "p__Bacillota", "p__Bacteroidota", "p__Pseudomonadota", "p__Verrucomicrobiota", "unclassified")
-average_relative_abundance %>% filter(phylum %in% main_phyla) %>% filter(type_rpkm_sum >= 1e+4) %>% 
+
+MGX_phylum_heatmap_green_NA <- MGX_type_phylum_abundances_filled %>% filter(phylum %in% main_phyla) %>%
+  filter(type_rpkm_sum >= 1e+4) %>% 
   ggplot(aes(x = phylum, y = reorder(type, type_rpkm_sum))) + 
-  geom_raster(aes(fill = average_relative_abundance_in_subject_phylum)) + 
+  geom_raster(aes(fill = relative_abundance)) + 
   coord_fixed() + 
-  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.12, na.value = "#f0f0f0") +
-  labs(y = "Defense system types with top richness", x = "", fill = "Relative abundances within phylum") + 
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.2, na.value = "#31a354") +
+  labs(y = "Defense systems with top abundances", x = "", fill = "Relative abundances within phylum") + 
   theme_bw() + 
-  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) +
   theme(axis.text = element_text(face = "bold")) + 
   theme(axis.ticks = element_line(colour = "#000000")) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
 # ~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-1.MGX_type_relative_abundance_in_phylum
+
+MGX_phylum_heatmap_grey_NA <- MGX_type_phylum_abundances_filled %>% filter(phylum %in% main_phyla) %>%
+  filter(type_rpkm_sum >= 1e+4) %>% 
+  ggplot(aes(x = phylum, y = reorder(type, type_rpkm_sum))) + 
+  geom_raster(aes(fill = relative_abundance)) + 
+  coord_fixed() + 
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.2, na.value = "#f0f0f0") +
+  labs(y = "Defense systems with top abundances", x = "", fill = "Relative abundances within phylum") + 
+  theme_bw() + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) +
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.ticks = element_line(colour = "#000000")) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
+# ~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-1.MGX_type_relative_abundance_in_phylum
+
+pdf("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-1.MGX_type_relative_abundance_in_phylum.pdf", width = 10, height = 10)
+print(MGX_phylum_heatmap_green_NA)
+print(MGX_phylum_heatmap_grey_NA)
+dev.off()
+# ~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-1.MGX_type_relative_abundance_in_phylum.pdf
 ```
 
 ### MGX genus level
@@ -300,35 +324,37 @@ MGX_genus <- MGX_genus %>% mutate(genus = case_when(
 ))
 unique(MGX_genus$genus)
 
-genus_rpkm_sum <- MGX_genus %>% group_by(genus, subject) %>% summarize(subject_genus_rpkm_sum = sum(normalized_type_rpkm))
-MGX_genus <- left_join(MGX_genus, genus_rpkm_sum, by = c("genus", "subject"))
-MGX_genus$relative_abundance_in_subject_genus <- MGX_genus$normalized_type_rpkm / MGX_genus$subject_genus_rpkm_sum
+MGX_genus_rpkm_sum <- MGX_genus %>% group_by(genus) %>% 
+  summarize(genus_rpkm_sum = sum(normalized_type_rpkm))
+MGX_type_genus_rpkm_sum <- MGX_genus %>% group_by(type, genus) %>% 
+  summarize(type_genus_rpkm_sum = sum(normalized_type_rpkm))
+MGX_type_genus_abundances <- left_join(MGX_type_genus_rpkm_sum, MGX_genus_rpkm_sum, 
+                                       by = "genus")
+MGX_type_genus_abundances <- MGX_type_genus_abundances %>% 
+  mutate(relative_abundance = type_genus_rpkm_sum / genus_rpkm_sum)
 
-average_relative_abundance <- MGX_genus %>% group_by(type, genus) %>% 
-  summarize(average_relative_abundance_in_subject_genus = sum(relative_abundance_in_subject_genus) / n_distinct(MGX_genus$subject))
-average_relative_abundance_spread <- average_relative_abundance %>% spread(key = genus, value = average_relative_abundance_in_subject_genus, 
-                                                                           fill=NA)
-average_relative_abundance <- average_relative_abundance_spread %>% gather(key = "genus", value = average_relative_abundance_in_subject_genus, 
-                                                                    colnames(average_relative_abundance_spread)[2:173])
-
-type_rpkm_sum <- MGX_genus %>% group_by(type) %>% summarize(type_rpkm_sum = sum(normalized_type_rpkm))
-average_relative_abundance <- left_join(average_relative_abundance, type_rpkm_sum, by = "type")
+MGX_type_genus_abundances_spread <- MGX_type_genus_abundances[, c(1, 2, 5)] %>% 
+  spread(key = "genus", value = "relative_abundance", fill = NA)
+MGX_type_genus_abundances_filled <- MGX_type_genus_abundances_spread %>% 
+  gather(key = "genus", value = "relative_abundance", colnames(MGX_type_genus_abundances_spread)[2:173])
 
 average_genus_abundance <- 
   read.delim("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary/average_genus_abundances.txt", sep = "\t", header = T)
 colnames(average_genus_abundance)[1] <- "genus"
-average_relative_abundance <- left_join(average_relative_abundance, average_genus_abundance, by = "genus")
+MGX_type_genus_abundances_filled <- left_join(MGX_type_genus_abundances_filled, average_genus_abundance, by = "genus")
 top_genus <- average_genus_abundance %>% filter(average_genus_abundance >= 0.25 & !(str_detect(genus, "GGB")))
 top_genus <- as.array(top_genus[, 1])
+top_genus
 
-average_relative_abundance$genus <- factor(average_relative_abundance$genus, 
-                                           levels = c("unclassified", unique(average_relative_abundance$genus)[1:171]))
+MGX_type_genus_abundances_filled <- 
+  left_join(MGX_type_genus_abundances_filled, type_rpkm_sum, by = "type")
 
-average_relative_abundance %>% filter(genus %in% top_genus) %>% filter(type_rpkm_sum >= 1e+4) %>% 
+
+MGX_genus_heatmap_grey_NA <- MGX_type_genus_abundances_filled %>% filter(genus %in% top_genus) %>% filter(type_rpkm_sum >= 1e+4) %>% 
   ggplot(aes(x = reorder(genus, -average_genus_abundance), y = reorder(type, type_rpkm_sum))) + 
-  geom_raster(aes(fill = average_relative_abundance_in_subject_genus)) + 
+  geom_raster(aes(fill = relative_abundance)) + 
   coord_fixed() +
-  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.15, na.value = "#f0f0f0") +
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.25, na.value = "#f0f0f0") +
   labs(y = "Defense system types with top richness", x = "", fill = "Relative abundances within genus") + 
   theme_bw() + 
   theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
@@ -337,11 +363,13 @@ average_relative_abundance %>% filter(genus %in% top_genus) %>% filter(type_rpkm
   theme(axis.ticks = element_line(colour = "#000000")) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1)) #~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-2.MGX_type_relative_abundance_in_genus_grey_NA
 
-average_relative_abundance %>% filter(genus %in% top_genus) %>% filter(type_rpkm_sum >= 1e+4) %>% 
+MGX_genus_heatmap_green_NA <- MGX_type_genus_abundances_filled %>% 
+  filter(genus %in% top_genus) %>%
+  filter(type_rpkm_sum >= 1e+4) %>% 
   ggplot(aes(x = reorder(genus, -average_genus_abundance), y = reorder(type, type_rpkm_sum))) + 
-  geom_raster(aes(fill = average_relative_abundance_in_subject_genus)) + 
+  geom_raster(aes(fill = relative_abundance)) + 
   coord_fixed() +
-  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.15, na.value = "#31a354") + # fill NA with 0 values
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.25, na.value = "#31a354") +
   labs(y = "Defense system types with top richness", x = "", fill = "Relative abundances within genus") + 
   theme_bw() + 
   theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
@@ -350,6 +378,12 @@ average_relative_abundance %>% filter(genus %in% top_genus) %>% filter(type_rpkm
   theme(axis.ticks = element_line(colour = "#000000")) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
 #~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-2.MGX_type_relative_abundance_in_genus_green_NA
+
+pdf("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-2.MGX_type_relative_abundance_in_genus.pdf", width = 10, height = 10)
+print(MGX_genus_heatmap_green_NA)
+print(MGX_genus_heatmap_grey_NA)
+dev.off()
+# ~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-2.MGX_type_relative_abundance_in_genus.pdf
 ```
 
 
@@ -368,32 +402,174 @@ MTX_phylum <- MTX_phylum %>% mutate(phylum = case_when(
   str_detect(mmseqs2_phylum, "p__") ~ mmseqs2_phylum
 ))
 
-phylum_rpkm_sum <- MTX_phylum %>% group_by(phylum, subject) %>% summarize(subject_phylum_rpkm_sum = sum(normalized_type_rpkm))
-MTX_phylum <- left_join(MTX_phylum, phylum_rpkm_sum, by = c("phylum", "subject"))
-MTX_phylum$relative_abundance_in_subject_phylum <- MTX_phylum$normalized_type_rpkm / MTX_phylum$subject_phylum_rpkm_sum
+MTX_phylum_rpkm_sum <- MTX_phylum %>% group_by(phylum) %>% 
+  summarize(phylum_rpkm_sum = sum(normalized_type_rpkm))
+MTX_type_phylum_rpkm_sum <- MTX_phylum %>% group_by(type, phylum) %>% 
+  summarize(type_phylum_rpkm_sum = sum(normalized_type_rpkm))
+MTX_type_phylum_abundances <- 
+  left_join(MTX_type_phylum_rpkm_sum, MTX_phylum_rpkm_sum, by = "phylum")
+MTX_type_phylum_abundances <- MTX_type_phylum_abundances %>% 
+  mutate(relative_abundance = type_phylum_rpkm_sum / phylum_rpkm_sum)
 
-average_relative_abundance <- MTX_phylum %>% group_by(type, phylum) %>% 
-  summarise(average_relative_abundance_in_subject_phylum = sum(relative_abundance_in_subject_phylum) / n_distinct(MTX_phylum$subject))
-average_relative_abundance_spread <- 
-  average_relative_abundance %>% spread(key = phylum, value = average_relative_abundance_in_subject_phylum, fill = 0)
-average_relative_abundance <- average_relative_abundance_spread %>% 
-  gather(key = "phylum", value = "average_relative_abundance_in_subject_phylum", colnames(average_relative_abundance_spread)[2:7])
+MTX_type_phylum_abundances_spread <- MTX_type_phylum_abundances[, c(1, 2, 5)] %>% 
+  spread(key = "phylum", value = "relative_abundance", fill = NA)
+MTX_type_phylum_abundances_filled <- MTX_type_phylum_abundances_spread %>% 
+  gather(key = "phylum", value = "relative_abundance", 
+         colnames(MTX_type_phylum_abundances_spread)[2:18])
 
-type_rpkm_sum <- MTX_phylum %>% group_by(type) %>% summarize(type_rpkm_sum = sum(normalized_type_rpkm))
-average_relative_abundance <- left_join(average_relative_abundance, type_rpkm_sum, by = "type")
+MTX_type_rpkm_sum <- MTX_phylum %>% group_by(type) %>% summarize(type_rpkm_sum = sum(normalized_type_rpkm))
 
-unique(average_relative_abundance$phylum)
-average_relative_abundance %>% filter(type_rpkm_sum >= 2e+3) %>% 
+MTX_type_phylum_abundances_filled <- 
+  left_join(MTX_type_phylum_abundances_filled, MTX_type_rpkm_sum, by = "type")
+
+main_phyla <- c("p__Actinomycetota", "p__Bacillota", "p__Bacteroidota", "p__Pseudomonadota", "p__Verrucomicrobiota", "unclassified")
+
+MTX_phylum_heatmap_no_MHS_green_NA <- 
+  MTX_type_phylum_abundances_filled %>% filter(type != "Mok_Hok_Sok") %>% 
+  filter(phylum %in% main_phyla) %>% 
+  filter(type_rpkm_sum >= 2e+3) %>% 
   ggplot(aes(x = phylum, y = reorder(type, type_rpkm_sum))) + 
-  geom_raster(aes(fill = average_relative_abundance_in_subject_phylum)) + 
+  geom_raster(aes(fill = relative_abundance)) + 
   coord_fixed() + 
-  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.12, na.value = "#f0f0f0") +
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.2, na.value = "#31a354") +
   labs(y = "Defense system types with top richness", x = "", fill = "Relative abundances within phylum") + 
   theme_bw() + 
   theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
   theme(axis.text = element_text(face = "bold")) + 
   theme(axis.ticks = element_line(colour = "#000000")) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
-# ~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-1.MTX_type_relative_abundance_in_phylum
+
+MTX_phylum_heatmap_green_NA <- 
+  MTX_type_phylum_abundances_filled %>%
+  filter(phylum %in% main_phyla) %>% 
+  filter(type_rpkm_sum >= 2e+3) %>% 
+  ggplot(aes(x = phylum, y = reorder(type, type_rpkm_sum))) + 
+  geom_raster(aes(fill = relative_abundance)) + 
+  coord_fixed() + 
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.4, na.value = "#31a354") +
+  labs(y = "Defense system types with top richness", x = "", fill = "Relative abundances within phylum") + 
+  theme_bw() + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.ticks = element_line(colour = "#000000")) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
+
+MTX_phylum_heatmap_no_MHS_grey_NA <- 
+  MTX_type_phylum_abundances_filled %>% filter(type != "Mok_Hok_Sok") %>% 
+  filter(phylum %in% main_phyla) %>% 
+  filter(type_rpkm_sum >= 2e+3) %>% 
+  ggplot(aes(x = phylum, y = reorder(type, type_rpkm_sum))) + 
+  geom_raster(aes(fill = relative_abundance)) + 
+  coord_fixed() + 
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.2, na.value = "#f0f0f0") +
+  labs(y = "Defense system types with top richness", x = "", fill = "Relative abundances within phylum") + 
+  theme_bw() + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.ticks = element_line(colour = "#000000")) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
+
+MTX_phylum_heatmap_grey_NA <- 
+  MTX_type_phylum_abundances_filled %>%
+  filter(phylum %in% main_phyla) %>% 
+  filter(type_rpkm_sum >= 2e+3) %>% 
+  ggplot(aes(x = phylum, y = reorder(type, type_rpkm_sum))) + 
+  geom_raster(aes(fill = relative_abundance)) + 
+  coord_fixed() + 
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.4, na.value = "#f0f0f0") +
+  labs(y = "Defense system types with top richness", x = "", fill = "Relative abundances within phylum") + 
+  theme_bw() + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.ticks = element_line(colour = "#000000")) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
+
+MTX_phylum_heatmap_green_NA
+MTX_phylum_heatmap_no_MHS_green_NA
+
+pdf("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-3.MTX_type_relative_abundance_in_phylum.pdf", width = 10, height = 10)
+print(MTX_phylum_heatmap_no_MHS_green_NA)
+print(MTX_phylum_heatmap_no_MHS_grey_NA)
+print(MTX_phylum_heatmap_green_NA)
+print(MTX_phylum_heatmap_grey_NA)
+dev.off()
+# ~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-3.MTX_type_relative_abundance_in_phylum
 ```
 
+
+
+### MTX genus level
+```{r}
+MTX_genus <- read.delim("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/MTX_type_genus_matrix.txt", 
+                        sep = "\t", header = F)
+colnames(MTX_genus) <- c("type", "system_average_gene_count", "mmseqs2_genus", "type_rpkm", "normalized_type_rpkm", "subject", "data_type")
+unique(MTX_genus$mmseqs2_genus)
+
+MTX_genus <- MTX_genus %>% mutate(genus = case_when(
+  str_detect(mmseqs2_genus, "g__unclassified") ~ "unclassified", 
+  mmseqs2_genus == "" ~ "unclassified", 
+  is.na(mmseqs2_genus) ~ "unclassified",
+  str_detect(mmseqs2_genus, "g__") ~ mmseqs2_genus
+))
+unique(MTX_genus$genus)
+
+MTX_genus_rpkm_sum <- MTX_genus %>% group_by(genus) %>% 
+  summarize(genus_rpkm_sum = sum(normalized_type_rpkm))
+MTX_type_genus_rpkm_sum <- MTX_genus %>% group_by(type, genus) %>% 
+  summarize(type_genus_rpkm_sum = sum(normalized_type_rpkm))
+MTX_type_genus_abundances <- left_join(MTX_type_genus_rpkm_sum, MTX_genus_rpkm_sum, 
+                                       by = "genus")
+MTX_type_genus_abundances <- MTX_type_genus_abundances %>% 
+  mutate(relative_abundance = type_genus_rpkm_sum / genus_rpkm_sum)
+
+MTX_type_genus_abundances_spread <- MTX_type_genus_abundances[, c(1, 2, 5)] %>% 
+  spread(key = "genus", value = "relative_abundance", fill = NA)
+MTX_type_genus_abundances_filled <- MTX_type_genus_abundances_spread %>% 
+  gather(key = "genus", value = "relative_abundance", colnames(MTX_type_genus_abundances_spread)[2:173])
+
+average_genus_abundance <- 
+  read.delim("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary/average_genus_abundances.txt", sep = "\t", header = T)
+colnames(average_genus_abundance)[1] <- "genus"
+MTX_type_genus_abundances_filled <- left_join(MTX_type_genus_abundances_filled, average_genus_abundance, by = "genus")
+top_genus <- average_genus_abundance %>% filter(average_genus_abundance >= 0.25 & !(str_detect(genus, "GGB")))
+top_genus <- as.array(top_genus[, 1])
+top_genus
+
+MTX_type_genus_abundances_filled <- 
+  left_join(MTX_type_genus_abundances_filled, MTX_type_rpkm_sum, by = "type")
+
+
+MTX_genus_heatmap_grey_NA <- MTX_type_genus_abundances_filled %>% filter(genus %in% top_genus) %>% filter(type_rpkm_sum >= 2e+3) %>% 
+  ggplot(aes(x = reorder(genus, -average_genus_abundance), y = reorder(type, type_rpkm_sum))) + 
+  geom_raster(aes(fill = relative_abundance)) + 
+  coord_fixed() +
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.4, na.value = "#f0f0f0") +
+  labs(y = "Defense system types with top richness", x = "", fill = "Relative abundances within genus") + 
+  theme_bw() + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.text.x = element_text(face = "bold.italic")) +
+  theme(axis.ticks = element_line(colour = "#000000")) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
+
+MTX_genus_heatmap_green_NA <- MTX_type_genus_abundances_filled %>% 
+  filter(genus %in% top_genus) %>%
+  filter(type_rpkm_sum >= 2e+3) %>% 
+  ggplot(aes(x = reorder(genus, -average_genus_abundance), y = reorder(type, type_rpkm_sum))) + 
+  geom_raster(aes(fill = relative_abundance)) + 
+  coord_fixed() +
+  scale_fill_gradient2(low = "#31a354", high = "#e9a3c9", mid = "#ffffbf", midpoint = 0.4, na.value = "#31a354") +
+  labs(y = "Defense system types with top richness", x = "", fill = "Relative abundances within genus") + 
+  theme_bw() + 
+  theme(legend.title = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8)) + 
+  theme(axis.text = element_text(face = "bold")) + 
+  theme(axis.text.x = element_text(face = "bold.italic")) +
+  theme(axis.ticks = element_line(colour = "#000000")) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1))
+
+pdf("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-4.MTX_type_relative_abundance_in_genus.pdf", width = 10, height = 10)
+print(MTX_genus_heatmap_green_NA)
+print(MTX_genus_heatmap_grey_NA)
+dev.off()
+# ~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/18-3-4.MTX_type_relative_abundance_in_genus.pdf
+```
