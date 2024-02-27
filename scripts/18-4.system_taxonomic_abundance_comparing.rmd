@@ -1,0 +1,537 @@
+---
+title: "18-4.system_taxonomic_abundance_comparing"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# Load libraries and set paths
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(randomcoloR)
+library(zoo)
+library(ggpubr)
+
+color_53 <- as.array(read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/color_53.txt", header = F)[, 1])
+
+getwd()
+setwd("~/crisprome/hmp/scripts")
+```
+
+## set the list of abundant defense systems in MGX, copied from 18-3.
+```{r}
+MGX_genus <- read.delim("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/MGX_type_genus_matrix.txt", 
+                        sep = "\t", header = F)
+colnames(MGX_genus) <- c("type", "system_average_gene_count", "mmseqs2_genus", "type_rpkm", "normalized_type_rpkm", "subject", "data_type")
+unique(MGX_genus$mmseqs2_genus)
+
+MGX_genus <- MGX_genus %>% mutate(genus = case_when(
+  str_detect(mmseqs2_genus, "g__unclassified") ~ "unclassified", 
+  mmseqs2_genus == "" ~ "unclassified", 
+  is.na(mmseqs2_genus) ~ "unclassified",
+  str_detect(mmseqs2_genus, "g__") ~ mmseqs2_genus
+))
+unique(MGX_genus$genus)
+
+MGX_type_rpkm_sum <- MGX_genus %>% group_by(type) %>% 
+  summarize(type_rpkm_sum = sum(normalized_type_rpkm))
+MGX_abundant_types <- 
+  as.array(MGX_type_rpkm_sum[MGX_type_rpkm_sum$type_rpkm_sum >= 1e+4,]$type)
+```
+
+## set the list of abundant defense systems in MTX, copied from 18-3.
+```{r}
+MTX_genus <- read.delim("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_composition/MTX_type_genus_matrix.txt", 
+                        sep = "\t", header = F)
+colnames(MTX_genus) <- c("type", "system_average_gene_count", "mmseqs2_genus", "type_rpkm", "normalized_type_rpkm", "subject", "data_type")
+unique(MTX_genus$mmseqs2_genus)
+
+MTX_genus <- MTX_genus %>% mutate(genus = case_when(
+  str_detect(mmseqs2_genus, "g__unclassified") ~ "unclassified", 
+  mmseqs2_genus == "" ~ "unclassified", 
+  is.na(mmseqs2_genus) ~ "unclassified",
+  str_detect(mmseqs2_genus, "g__") ~ mmseqs2_genus
+))
+unique(MTX_genus$genus)
+
+MTX_type_rpkm_sum <- MTX_genus %>% group_by(type) %>% 
+  summarize(type_rpkm_sum = sum(normalized_type_rpkm))
+MTX_abundant_types <- 
+  as.array(MTX_type_rpkm_sum[MTX_type_rpkm_sum$type_rpkm_sum >= 2e+3,]$type)
+```
+
+## set the list of top abundance genus, copied from 18-3
+```{r}
+average_genus_abundance <- 
+  read.delim("~/crisprome/hmp/intermediates/19.total_taxonomy/metaphlan/mpa_taxonomy_summary/average_genus_abundances.txt", sep = "\t", header = T)
+colnames(average_genus_abundance)[1] <- "genus"
+top_genus <- average_genus_abundance %>% filter(average_genus_abundance >= 0.25 & !(str_detect(genus, "GGB")))
+top_genus <- as.array(top_genus[, 1])
+average_genus_abundance
+```
+
+
+# Statistically compare the genetic/transcriptional abundances of defense systems in different taxonomies.
+All subjects' data is too large, so data of subject 2039 will be summarized as an example, and then run with a loop.
+
+## summarize the normalized rpkm and relative abundance of each system in each sample (subject's time point) in MGX.
+```{r}
+contig_taxon_matrix <- read.delim("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/2039_summarized_contig_taxon_matrix.txt", sep = "\t", header = T)
+defense_gene_matrix <- read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/2039_defense_gene_matrix.txt", 
+                                  sep = "\t", header = T)
+colnames(contig_taxon_matrix)
+colnames(defense_gene_matrix)
+defense_gene_mapping_taxon_matrix <- left_join(defense_gene_matrix[, -16], contig_taxon_matrix, by = "contig_id")
+
+defense_gene_mapping_taxon_matrix <- defense_gene_mapping_taxon_matrix %>% 
+  mutate(genus = case_when(
+  str_detect(mmseqs2_genus, "g__unclassified") ~ "unclassified", 
+  mmseqs2_genus == "" ~ "unclassified", 
+  is.na(mmseqs2_genus) ~ "unclassified",
+  str_detect(mmseqs2_genus, "g__") ~ mmseqs2_genus
+))
+
+colnames(defense_gene_mapping_taxon_matrix)
+
+# calculate the normalized RPKM sum of each system type belonging to one genus in one sample.
+MGX_type_genus_sample_rpkm_sum <- defense_gene_mapping_taxon_matrix %>% 
+  group_by(type, genus, system_average_gene_count, subject.x, time_point, time_point_num) %>% 
+  summarize(type_rpkm_sum_in_sample_genus = sum(rpkm))
+MGX_type_genus_sample_rpkm_sum <- MGX_type_genus_sample_rpkm_sum %>% mutate(
+  normalized_rpkm = type_rpkm_sum_in_sample_genus / system_average_gene_count
+)
+
+# calculate the normalized RPKM sum of each genus in one sample.
+MGX_genus_sample_rpkm_sum <- MGX_type_genus_sample_rpkm_sum %>% 
+  group_by(genus, subject.x, time_point, time_point_num) %>% 
+  summarize(normalized_rpkm_sum_in_sample_genus = sum(normalized_rpkm))
+
+# merge the tables of genus sum and type sum.
+MGX_type_genus_sample_rpkm_sum <- 
+  left_join(MGX_type_genus_sample_rpkm_sum, MGX_genus_sample_rpkm_sum, 
+            by = c("genus", "subject.x", "time_point", "time_point_num"))
+
+MGX_type_genus_sample_rpkm_sum <- MGX_type_genus_sample_rpkm_sum %>% mutate(
+  relative_abundance_in_sample_genus = normalized_rpkm / normalized_rpkm_sum_in_sample_genus
+)
+
+MGX_type_genus_sample_rpkm_sum$data_type <- "MGX"
+colnames(MGX_type_genus_sample_rpkm_sum)[4] <- "subject"
+colnames(MGX_type_genus_sample_rpkm_sum)
+
+MGX_type_genus_sample_rpkm_sum %>% filter(type %in% MGX_abundant_types) %>% 
+  filter(genus %in% top_genus) %>% 
+  ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+  geom_point() + 
+  facet_grid(genus ~ type, scales = "free_y")
+```
+
+## summarize the normalized rpkm and relative abundance of each system in each sample (subject's time point) in MTX.
+```{r}
+MTX_defense_gene_matrix <- 
+  read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/2039_MTX_defense_gene_matrix.txt", 
+             sep = "\t", header = T)
+
+colnames(contig_taxon_matrix)
+colnames(MTX_defense_gene_matrix)
+
+MTX_defense_gene_mapping_taxon_matrix <- left_join(MTX_defense_gene_matrix[, -16], contig_taxon_matrix, by = "contig_id")
+
+MTX_defense_gene_mapping_taxon_matrix <- MTX_defense_gene_mapping_taxon_matrix %>% 
+  mutate(genus = case_when(
+  str_detect(mmseqs2_genus, "g__unclassified") ~ "unclassified", 
+  mmseqs2_genus == "" ~ "unclassified", 
+  is.na(mmseqs2_genus) ~ "unclassified",
+  str_detect(mmseqs2_genus, "g__") ~ mmseqs2_genus
+))
+colnames(MTX_defense_gene_mapping_taxon_matrix)
+
+MTX_type_genus_sample_rpkm_sum <- MTX_defense_gene_mapping_taxon_matrix %>% 
+  group_by(type, genus, system_average_gene_count, subject.x, time_point, time_point_num) %>% 
+  summarize(type_rpkm_sum_in_sample_genus = sum(rpkm))
+MTX_type_genus_sample_rpkm_sum <- MTX_type_genus_sample_rpkm_sum %>% mutate(
+  normalized_rpkm = type_rpkm_sum_in_sample_genus / system_average_gene_count
+)
+
+MTX_genus_sample_rpkm_sum <- MTX_type_genus_sample_rpkm_sum %>% 
+  group_by(genus, subject.x, time_point, time_point_num) %>% 
+  summarize(normalized_rpkm_sum_in_sample_genus = sum(normalized_rpkm))
+
+MTX_type_genus_sample_rpkm_sum <- 
+  left_join(MTX_type_genus_sample_rpkm_sum, MTX_genus_sample_rpkm_sum, 
+            by = c("genus", "subject.x", "time_point", "time_point_num"))
+
+MTX_type_genus_sample_rpkm_sum <- MTX_type_genus_sample_rpkm_sum %>% mutate(
+  relative_abundance_in_sample_genus = normalized_rpkm / normalized_rpkm_sum_in_sample_genus
+)
+
+MTX_type_genus_sample_rpkm_sum$data_type <- "MTX"
+colnames(MTX_type_genus_sample_rpkm_sum)[4] <- "subject"
+colnames(MTX_type_genus_sample_rpkm_sum)
+
+MTX_type_genus_sample_rpkm_sum %>% filter(type %in% MTX_abundant_types) %>% 
+  filter(genus %in% top_genus) %>% 
+  ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+  geom_point() + 
+  facet_grid(genus ~ type, scales = "free_y")
+```
+
+## merge the two table of MGX and MTX
+```{r}
+type_abundance_in_sample_genus <- rbind(MGX_type_genus_sample_rpkm_sum, MTX_type_genus_sample_rpkm_sum)
+type_abundance_in_sample_genus %>% filter(type %in% MGX_abundant_types | type %in% MTX_abundant_types) %>% 
+  filter(genus %in% top_genus) %>% 
+  ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+  geom_point() + 
+  facet_grid(genus ~ type, scales = "free_y")
+```
+
+## Summarize each subject's data with a loop.
+
+### Set parameters
+```{r}
+input_list <- read.table("~/crisprome/hmp/intermediates/1.dataset_summary/1-8.total_nonIBD_metadata", header = T, sep = "\t")
+subjects <- as.array(as.character(unique(input_list[,1])))
+base <- "~/crisprome/hmp/"
+```
+
+### Set paths
+```{r}
+for (subject in subjects){
+  print(subject)
+  
+  contig_taxon_matrix_input <- paste("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/", subject,
+                                     "_summarized_contig_taxon_matrix.txt", sep = "")
+  defense_gene_matrix_input <- paste("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/", subject,
+                                     "_defense_gene_matrix.txt", sep = "")
+  MTX_defense_gene_matrix_input <- paste("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/", subject,
+                                         "_MTX_defense_gene_matrix.txt", sep = "")
+  type_abundance_in_sample_genus_output <- paste("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_comparison/",
+                                                 subject, "_type_relative_abundances_in_sample_genus.txt", sep = "")
+  
+  print(contig_taxon_matrix_input)
+  print(defense_gene_matrix_input)
+  print(MTX_defense_gene_matrix_input)
+  print(type_abundance_in_sample_genus_output)
+}
+```
+
+### Loop
+```{r}
+for (subject in subjects) {
+
+# set paths
+  print(subject)
+  
+  contig_taxon_matrix_input <- paste("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/", subject,
+                                     "_summarized_contig_taxon_matrix.txt", sep = "")
+  defense_gene_matrix_input <- paste("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/", subject,
+                                     "_defense_gene_matrix.txt", sep = "")
+  MTX_defense_gene_matrix_input <- paste("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/all_subjects_stat/", subject,
+                                         "_MTX_defense_gene_matrix.txt", sep = "")
+  type_abundance_in_sample_genus_output <- paste("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_comparison/",
+                                                 subject, "_type_relative_abundances_in_sample_genus.txt", sep = "")
+  
+# ------------------------------------------------------------------------------
+# MGX
+  contig_taxon_matrix <- read.delim(file = contig_taxon_matrix_input, sep = "\t", header = T)
+  defense_gene_matrix <- read.delim(file = defense_gene_matrix_input, sep = "\t", header = T)
+
+  defense_gene_mapping_taxon_matrix <- left_join(defense_gene_matrix[, -16], contig_taxon_matrix, by = "contig_id")
+  defense_gene_mapping_taxon_matrix <- defense_gene_mapping_taxon_matrix %>% 
+    mutate(genus = case_when(
+    str_detect(mmseqs2_genus, "g__unclassified") ~ "unclassified", 
+    mmseqs2_genus == "" ~ "unclassified", 
+    is.na(mmseqs2_genus) ~ "unclassified",
+    str_detect(mmseqs2_genus, "g__") ~ mmseqs2_genus
+  ))
+
+  # calculate the normalized RPKM sum of each system type belonging to one genus in one sample.
+  MGX_type_genus_sample_rpkm_sum <- defense_gene_mapping_taxon_matrix %>% 
+    group_by(type, genus, system_average_gene_count, subject.x, time_point, time_point_num) %>% 
+    summarize(type_rpkm_sum_in_sample_genus = sum(rpkm))
+  MGX_type_genus_sample_rpkm_sum <- MGX_type_genus_sample_rpkm_sum %>% mutate(
+    normalized_rpkm = type_rpkm_sum_in_sample_genus / system_average_gene_count
+  )
+
+  # calculate the normalized RPKM sum of each genus in one sample.
+  MGX_genus_sample_rpkm_sum <- MGX_type_genus_sample_rpkm_sum %>% 
+    group_by(genus, subject.x, time_point, time_point_num) %>% 
+    summarize(normalized_rpkm_sum_in_sample_genus = sum(normalized_rpkm))
+
+  # merge the tables of genus sum and type sum.
+  MGX_type_genus_sample_rpkm_sum <- 
+    left_join(MGX_type_genus_sample_rpkm_sum, MGX_genus_sample_rpkm_sum, 
+              by = c("genus", "subject.x", "time_point", "time_point_num"))
+
+  MGX_type_genus_sample_rpkm_sum <- MGX_type_genus_sample_rpkm_sum %>% mutate(
+    relative_abundance_in_sample_genus = normalized_rpkm / normalized_rpkm_sum_in_sample_genus
+  )
+  
+  MGX_type_genus_sample_rpkm_sum$data_type <- "MGX"
+  colnames(MGX_type_genus_sample_rpkm_sum)[4] <- "subject"
+
+# ------------------------------------------------------------------------------
+# MTX
+  MTX_defense_gene_matrix <- 
+    read.delim(file = MTX_defense_gene_matrix_input, sep = "\t", header = T)
+  
+  MTX_defense_gene_mapping_taxon_matrix <- left_join(MTX_defense_gene_matrix[, -16], contig_taxon_matrix, by = "contig_id")
+
+  MTX_defense_gene_mapping_taxon_matrix <- MTX_defense_gene_mapping_taxon_matrix %>% 
+    mutate(genus = case_when(
+    str_detect(mmseqs2_genus, "g__unclassified") ~ "unclassified", 
+    mmseqs2_genus == "" ~ "unclassified", 
+    is.na(mmseqs2_genus) ~ "unclassified",
+    str_detect(mmseqs2_genus, "g__") ~ mmseqs2_genus
+  ))
+  
+  # calculate the normalized RPKM sum of each system type belonging to one genus in one sample.
+  MTX_type_genus_sample_rpkm_sum <- MTX_defense_gene_mapping_taxon_matrix %>% 
+    group_by(type, genus, system_average_gene_count, subject.x, time_point, time_point_num) %>% 
+    summarize(type_rpkm_sum_in_sample_genus = sum(rpkm))
+  MTX_type_genus_sample_rpkm_sum <- MTX_type_genus_sample_rpkm_sum %>% mutate(
+    normalized_rpkm = type_rpkm_sum_in_sample_genus / system_average_gene_count
+  )
+
+  # calculate the normalized RPKM sum of each genus in one sample.
+  MTX_genus_sample_rpkm_sum <- MTX_type_genus_sample_rpkm_sum %>% 
+    group_by(genus, subject.x, time_point, time_point_num) %>% 
+    summarize(normalized_rpkm_sum_in_sample_genus = sum(normalized_rpkm))
+
+  # merge the tables of genus sum and type sum.
+  MTX_type_genus_sample_rpkm_sum <- 
+    left_join(MTX_type_genus_sample_rpkm_sum, MTX_genus_sample_rpkm_sum, 
+              by = c("genus", "subject.x", "time_point", "time_point_num"))
+
+  MTX_type_genus_sample_rpkm_sum <- MTX_type_genus_sample_rpkm_sum %>% mutate(
+    relative_abundance_in_sample_genus = normalized_rpkm / normalized_rpkm_sum_in_sample_genus
+  )
+
+  MTX_type_genus_sample_rpkm_sum$data_type <- "MTX"
+  colnames(MTX_type_genus_sample_rpkm_sum)[4] <- "subject"
+  
+# merge the tables from MGX/MTX and write to file
+  type_abundance_in_sample_genus <- rbind(MGX_type_genus_sample_rpkm_sum, MTX_type_genus_sample_rpkm_sum)
+  type_abundance_in_sample_genus %>% write.table(file = type_abundance_in_sample_genus_output, col.names = T, row.names = F, quote = F, sep = "\t")
+  }
+```
+
+
+
+### merge the output table of each subject into one table
+```{bash}
+cd ~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_comparison
+head -n 1 2039_type_relative_abundances_in_sample_genus.txt > type_relative_abundances_in_sample_genus.txt
+cat *_type_relative_abundances_in_sample_genus.txt | grep "data_type" -v >> type_relative_abundances_in_sample_genus.txt
+```
+
+## With the merged table containing all subjects' data, compare the differential abundancies of defense systems belongning to different taxonomies.
+```{r}
+merged_type_abundance_in_sample_genus <-
+  read.delim("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_comparison/type_relative_abundances_in_sample_genus.txt", header = T, sep = "\t")
+
+# fill na values with 0
+na_values <- is.na(merged_type_abundance_in_sample_genus)
+merged_type_abundance_in_sample_genus[na_values] <- 0
+
+# add the abundance information of genus and types for arranging the order of faceting.
+type_rpkm_sum <- merged_type_abundance_in_sample_genus %>% group_by(type) %>% 
+  summarize(type_normalized_rpkm_sum = sum(normalized_rpkm_sum_in_sample_genus))
+merged_type_abundance_in_sample_genus <- left_join(merged_type_abundance_in_sample_genus, type_rpkm_sum, by = "type")
+merged_type_abundance_in_sample_genus <- left_join(merged_type_abundance_in_sample_genus, average_genus_abundance, by = "genus")
+
+all_genus_type_abundances <- merged_type_abundance_in_sample_genus %>% filter(type %in% MGX_abundant_types | type %in% MTX_abundant_types) %>% 
+  filter(genus %in% top_genus) %>% 
+  ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+  geom_violin() + 
+  geom_point(aes(fill = as.character(subject)), shape = 21, position = position_dodge(width = 0.1), alpha = 0.5, size = 1) +
+  facet_grid(reorder(genus, -average_genus_abundance) ~ reorder(type, -type_normalized_rpkm_sum)) + 
+  scale_fill_manual(values = color_53) + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 5)) + 
+  theme(strip.text.x = element_text(size = 8), strip.text.y = element_text(size = 7, face = "italic")) + 
+  scale_y_continuous(limits = c(-0.01, 1.01)) + 
+  theme(legend.position = "none") + 
+  labs(x = "", y = "Relative abundance of the corresponding system in the genus") + 
+
+all_genus_type_abundances_no_unclassified <- 
+  merged_type_abundance_in_sample_genus %>% filter(type %in% MGX_abundant_types | type %in% MTX_abundant_types) %>% 
+  filter(genus %in% top_genus) %>% 
+  filter(genus != "unclassified") %>% 
+  ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+  geom_violin() + 
+  geom_point(aes(fill = as.character(subject)), shape = 21, position = position_dodge(width = 0.1), alpha = 0.5, size = 1) +
+  facet_grid(reorder(genus, -average_genus_abundance) ~ reorder(type, -type_normalized_rpkm_sum)) + 
+  scale_fill_manual(values = color_53) + 
+  theme_bw() + 
+  theme(axis.text = element_text(size = 5)) + 
+  theme(strip.text.x = element_text(size = 8), strip.text.y = element_text(size = 7, face = "italic")) + 
+  scale_y_continuous(limits = c(-0.01, 1.01)) + 
+  theme(legend.position = "none") +
+  labs(x = "", y = "Relative abundance of the corresponding system in the genus")
+
+pdf("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_comparison/18-4-1.type_abundance_in_all_genus.pdf", 
+    width = 30, height = 30)
+print(all_genus_type_abundances)
+print(all_genus_type_abundances_no_unclassified)
+dev.off()
+```
+
+### print the relative abundances figures of each genus, test
+```{r}
+all_genus <- average_genus_abundance %>% filter(!str_detect(genus, "GGB"))
+all_genus <- reorder(all_genus$genus, -all_genus$average_genus_abundance)
+for (genus_i in all_genus) {
+  print(genus_i)
+}
+
+genus_type_abundance <- merged_type_abundance_in_sample_genus %>% filter(genus == "g__Bacteroides") %>% 
+  filter(type %in% MGX_abundant_types | type %in% MTX_abundant_types) %>%
+  ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+  geom_violin() + 
+  geom_point(aes(fill = as.character(subject)), shape = 21, position = position_dodge(width = 0.1), alpha = 0.7) + 
+  facet_wrap(.~ reorder(type, -type_normalized_rpkm_sum), nrow = 1) + 
+  theme_bw() +
+  labs(x = "g__Bacteroides", y = "Relative abundance of the corresponding system") + 
+  scale_fill_manual(values = color_53) +
+  theme(axis.title.x = element_text(face = "italic"), axis.title.y = element_text(size = 8)) + 
+  theme(legend.position = "none")
+
+genus_type_abundance_free_faceting <- merged_type_abundance_in_sample_genus %>% filter(genus == "g__Bacteroides") %>% 
+  filter(type %in% MGX_abundant_types | type %in% MTX_abundant_types) %>%
+  ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+  geom_violin() + 
+  geom_point(aes(fill = as.character(subject)), shape = 21, position = position_dodge(width = 0.1), alpha = 0.7) + 
+  facet_wrap(.~ reorder(type, -type_normalized_rpkm_sum)) + 
+  theme_bw() +
+  labs(x = "g__Bacteroides", y = "Relative abundance of the corresponding system") + 
+  scale_fill_manual(values = color_53) +
+  theme(axis.title.x = element_text(face = "italic"), axis.title.y = element_text(size = 8)) + 
+  theme(legend.position = "none")
+
+genus_all_type_abundance_free_faceting <- merged_type_abundance_in_sample_genus %>% filter(genus == "g__Bacteroides") %>% 
+  # filter(type %in% MGX_abundant_types | type %in% MTX_abundant_types) %>%
+  ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+  geom_violin() + 
+  geom_point(aes(fill = as.character(subject)), shape = 21, position = position_dodge(width = 0.1), alpha = 0.7) + 
+  facet_wrap(.~ reorder(type, -type_normalized_rpkm_sum)) + 
+  theme_bw() +
+  labs(x = "g__Bacteroides", y = "Relative abundance of the corresponding system") + 
+  scale_fill_manual(values = color_53) +
+  theme(axis.title.x = element_text(face = "italic"), axis.title.y = element_text(size = 8)) + 
+  theme(legend.position = "none")
+pdf("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_comparison/18-4.genus_type_abundance_test.pdf", 
+    width = 10, height = 10)
+print(genus_type_abundance)
+print(genus_type_abundance_free_faceting)
+print(genus_all_type_abundance_free_faceting)
+dev.off()
+
+
+pdf("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_comparison/18-4.genus_type_abundance_test.pdf", 
+    width = 30, height = 3)
+print(genus_type_abundance)
+dev.off()
+```
+
+
+
+### printing figures with faceting in one row
+```{r}
+for (genus_i in all_genus) {
+  print(genus_i)
+
+  plotted_table <- merged_type_abundance_in_sample_genus %>% filter(genus == genus_i) %>% 
+    filter(type %in% MGX_abundant_types | type %in% MTX_abundant_types)
+# determine if the plot is blank
+  row_num <- nrow(plotted_table)
+  print(row_num)
+  if (row_num == 0) {
+    next
+  }
+  
+# set the plot sizes
+  type_num <- n_distinct(plotted_table$type)
+  print(type_num)
+  plot_height <- 3
+  plot_width <- type_num + 1
+  
+# set the name of saved pdf
+  plot_name <- paste("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_comparison/18-4-2_genus_type_abundances/18-4-2.", 
+                     genus_i, "_type_abundance.pdf", sep = "")
+  print(plot_name)
+  
+  genus_type_abundance <- merged_type_abundance_in_sample_genus %>% filter(genus == genus_i) %>% 
+    filter(type %in% MGX_abundant_types | type %in% MTX_abundant_types) %>%
+    ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+    geom_violin() + 
+    geom_point(aes(fill = as.character(subject)), shape = 21, position = position_dodge(width = 0.1), alpha = 0.7) + 
+    facet_wrap(.~ reorder(type, -type_normalized_rpkm_sum), nrow = 1) + 
+    theme_bw() +
+    labs(x = genus_i, y = "Relative abundance of the corresponding system") + 
+    scale_fill_manual(values = color_53) +
+    scale_y_continuous(limits = c(-0.01, 1.01)) + 
+    theme(axis.title.x = element_text(face = "italic"), axis.title.y = element_text(size = 8)) + 
+    theme(legend.position = "none")
+  
+  ggsave(filename = plot_name, plot = genus_type_abundance, width = plot_width, height = plot_height)
+}
+```
+
+### printing figures with free faceting
+```{r}
+pdf("~/crisprome/hmp/intermediates/18.taxonomy_annotation/defense_system_taxonomy_comparison/18-4-3.all_type_all_genus_abundances_free_faceting.pdf", height = 10, width = 10)
+for (genus_i in all_genus) {
+  print(genus_i)
+
+  plotted_table <- merged_type_abundance_in_sample_genus %>% filter(genus == genus_i)
+# determine if the plot is blank
+  row_num <- nrow(plotted_table)
+  print(row_num)
+  if (row_num == 0) {
+    next
+  }
+  
+  genus_all_type_abundance_free_faceting <- merged_type_abundance_in_sample_genus %>% filter(genus == genus_i) %>% 
+    ggplot(aes(x = data_type, y = relative_abundance_in_sample_genus)) + 
+    geom_violin() + 
+    geom_point(aes(fill = as.character(subject)), shape = 21, position = position_dodge(width = 0.1), alpha = 0.7) + 
+    facet_wrap(.~ reorder(type, -type_normalized_rpkm_sum)) + 
+    theme_bw() +
+    labs(x = genus_i, y = "Relative abundance of the corresponding system") + 
+    scale_fill_manual(values = color_53) +
+    scale_y_continuous(limits = c(-0.01, 1.01)) + 
+    theme(axis.title.x = element_text(face = "italic"), axis.title.y = element_text(size = 8)) + 
+    theme(legend.position = "none")
+  
+  print(genus_all_type_abundance_free_faceting)
+}
+dev.off()
+```
+
