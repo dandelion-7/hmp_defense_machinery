@@ -38,6 +38,8 @@ library(randomcoloR)
 setwd("~/crisprome/hmp/scripts/")
 ```
 
+
+
 ## Summarize the positions of predicted defense systems, and other information of the system (type, subtype, gene count, wholeness, score, etc.)
 ### take subject 2039 as an example
 ```{r}
@@ -45,23 +47,23 @@ all_cds <- read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stat
 defense_cds <- all_cds %>% filter(gene_name != "non-defense-gene")
 
 colnames(defense_cds)
-defense_systems <- defense_cds %>% group_by(subject, contig_id, sys_id.x, strand, sys_wholeness, sys_score, protein_in_syst,
+defense_systems <- defense_cds %>% group_by(subject, contig_id, sys_id.x, sys_wholeness, sys_score, protein_in_syst,
                                             name_of_profiles_in_sys, sys_beg, sys_end, genes_count, type, subtype) %>% 
-  summarize(system_begin_position = min(start), system_end_position = max(end),
-            coverage_begin = max(min(start)-200, 1), 
-            coverge_end = min(max(end)+200, as.numeric(str_remove(contig_len, "len="))))
+  summarize(sum_strand = sum(strand), system_begin_position = min(start), system_end_position = max(end),
+            coverage_begin = max(min(start)-500, 1), 
+            coverge_end = min(max(end)+500, as.numeric(str_remove(contig_len, "len="))))
 
 defense_systems <- defense_systems %>% mutate(coverage_region = paste(contig_id, ":", as.character(coverage_begin),
                                                                       "-", as.character(coverge_end), sep = ""))
 
 defense_systems <- defense_systems %>% mutate(coverage_file_name = paste(type, subtype, genes_count, 
-                                                                         strand, coverage_region, sep = "|"))
+                                                                         sum_strand, floor(as.numeric(sys_wholeness) * 100), coverage_region, sep = "|"))
 defense_systems %>% write.table("~/crisprome/hmp/intermediates/20.coverage_analysis/system_position_summary/2039_systems_info.txt",
                                 sep = "\t", col.names = T, row.names = F, quote = F)
-defense_systems[, c(18, 19)] %>% write.table("~/crisprome/hmp/intermediates/20.coverage_analysis/system_position_summary/2039_systems_coverge.txt", sep = "\t", col.names = F, row.names = F, quote = F)
+defense_systems[, c(18, 19)] %>% write.table("~/crisprome/hmp/intermediates/20.coverage_analysis/system_position_summary/2039_systems_coverage.txt", sep = "\t", col.names = F, row.names = F, quote = F)
 ```
 
-## use a loop to summarize the systems positions for all subjects.
+## use a loop to summarize the systems' positions for all subjects.
 ### set parameters
 ```{r}
 input_list <- read.delim("~/crisprome/hmp/intermediates/1.dataset_summary/1-8.total_nonIBD_metadata", sep = "\t", header = T)
@@ -99,19 +101,186 @@ for (subject in subjects) {
   all_cds <- read.delim(file = all_cds_input, sep = "\t", header = T)
   defense_cds <- all_cds %>% filter(gene_name != "non-defense-gene")
 
-  colnames(defense_cds)
-  defense_systems <- defense_cds %>% group_by(subject, contig_id, sys_id.x, strand, sys_wholeness, sys_score, protein_in_syst,
-                                              name_of_profiles_in_sys, sys_beg, sys_end, genes_count, type, subtype) %>% 
-    summarize(system_begin_position = min(start), system_end_position = max(end),
-              coverage_begin = max(min(start)-200, 1), 
-              coverge_end = min(max(end)+200, as.numeric(str_remove(contig_len, "len="))))
+  # colnames(defense_cds)
+  defense_systems <- defense_cds %>% group_by(subject, contig_id, sys_id.x, sys_wholeness, sys_score, protein_in_syst,
+                                            name_of_profiles_in_sys, sys_beg, sys_end, genes_count, type, subtype) %>% 
+  summarize(sum_strand = sum(strand), system_begin_position = min(start), system_end_position = max(end),
+            coverage_begin = max(min(start)-500, 1), 
+            coverge_end = min(max(end)+500, as.numeric(str_remove(contig_len, "len="))))
 
   defense_systems <- defense_systems %>% mutate(coverage_region = paste(contig_id, ":", as.character(coverage_begin),
-                                                                        "-", as.character(coverge_end), sep = ""))
+                                                                      "-", as.character(coverge_end), sep = ""))
 
   defense_systems <- defense_systems %>% mutate(coverage_file_name = paste(type, subtype, genes_count, 
-                                                                           strand, coverage_region, sep = "|"))
+                                                                         sum_strand, floor(as.numeric(sys_wholeness) * 100), coverage_region, sep = "|"))
   defense_systems %>% write.table(file = defense_systems_output, sep = "\t", col.names = T, row.names = F, quote = F)
   defense_systems[, c(18, 19)] %>% write.table(file = coverage_output, sep = "\t", col.names = F, row.names = F, quote = F)
 }
 ```
+
+
+
+## Summarize the defense genes' start/end/strand, and also non-defense-genes lying within "defense operon", for drawing operon structures in batch.
+### take subject 2039 as an example.
+```{r}
+all_cds <- read.delim("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/gene_annotation/16-1-3.2039_cds_with_fine_annotation.txt", sep = "\t", header = T)
+defense_cds <- all_cds %>% filter(gene_name != "non-defense-gene")
+
+colnames(defense_cds)
+defense_systems <- defense_cds %>% group_by(subject, contig_id, sys_id.x, sys_wholeness, sys_score, protein_in_syst,
+                                            name_of_profiles_in_sys, sys_beg, sys_end, genes_count, type, subtype) %>% 
+  summarize(sum_strand = sum(strand), system_begin_position = min(start), system_end_position = max(end),
+            coverage_begin = max(min(start)-500, 1), 
+            coverge_end = min(max(end)+500, as.numeric(str_remove(contig_len, "len="))))
+
+defense_systems <- defense_systems %>% mutate(coverage_region = paste(contig_id, ":", as.character(coverage_begin),
+                                                                      "-", as.character(coverge_end), sep = ""))
+
+  defense_systems <- defense_systems %>% mutate(coverage_file_name = paste(type, subtype, genes_count, 
+                                                                         sum_strand, floor(as.numeric(sys_wholeness) * 100), coverage_region, sep = "|"))
+colnames(defense_systems)
+
+for (i in c(1:nrow(defense_systems))) {
+  # colnames(defense_systems)
+  left=as.numeric(defense_systems$system_begin_position[i])
+  right=as.numeric(defense_systems$system_end_position[i])
+  coverage_begin=as.numeric(defense_systems$coverage_begin[i])
+  coverage_end=as.numeric(defense_systems$coverge_end[i])
+  contig=as.character(defense_systems$contig_id[i])
+  coverage_region=as.character(defense_systems$coverage_region[i])
+  coverage_file_name=as.character(defense_systems$coverage_file_name[i])
+  
+  print(paste(i, ":", left, "-", right, " of contig ", contig, sep = ""))
+  
+  involved_cds <- all_cds %>% filter(contig_id == contig) %>% filter(start >= left, end <= right)
+  print(nrow(involved_cds))
+  
+  involved_defense_cds <- defense_cds %>% filter(contig_id == contig) %>% filter(start >= left & end <= right)
+  print(nrow(involved_defense_cds))
+  
+  colnames(involved_cds)
+  
+  operon_structure <- involved_cds[,c("contig_id","gene_name", "start", "end", "strand")]
+  operon_structure$coverage_region <- coverage_region
+  operon_structure$coverage_file_name <- coverage_file_name
+  operon_structure$operon_left <- left
+  operon_structure$operon_right <- right
+  operon_structure$coverage_left <- coverage_begin
+  operon_structure$coverage_right <- coverage_end
+  
+  if (i == 1) {
+    operon_structure %>% write.table("~/crisprome/hmp/intermediates/20.coverage_analysis/operon_structures/2039_operon_structures.txt", sep = "\t",
+                                   row.names = F, col.names = T, quote = F, append = F)
+  } else {
+    operon_structure %>% write.table("~/crisprome/hmp/intermediates/20.coverage_analysis/operon_structures/2039_operon_structures.txt", sep = "\t",
+                                   row.names = F, col.names = F, quote = F, append = T)
+  } 
+}
+```
+
+## use a loop to summarize each subject's oepron structures
+### set parameters
+```{r}
+input_list <- read.delim("~/crisprome/hmp/intermediates/1.dataset_summary/1-8.total_nonIBD_metadata", sep = "\t", header = T)
+subjects <- as.character(unique(input_list$subject_id))
+
+for (subject in subjects) {
+  print(subject)
+  
+  all_cds_input <- paste("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/gene_annotation/16-1-3.", 
+                         subject, "_cds_with_fine_annotation.txt", sep = "")
+  operon_structure_output <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/operon_structures/", subject, "_operon_structures.txt",
+                                   sep = "")
+  
+  print(all_cds_input)
+  print(operon_structure_output)
+}
+```
+
+### loop
+```{r}
+for (subject in subjects) {
+  print(subject)
+  all_cds_input <- paste("~/crisprome/hmp/intermediates/16.antiphage_machinery_stats/gene_annotation/16-1-3.", 
+                         subject, "_cds_with_fine_annotation.txt", sep = "")
+  operon_structure_output <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/operon_structures/", subject, "_operon_structures.txt",
+                                   sep = "")
+  
+  all_cds <- read.delim(file = all_cds_input, sep = "\t", header = T)
+  defense_cds <- all_cds %>% filter(gene_name != "non-defense-gene")
+
+  colnames(defense_cds)
+  defense_systems <- defense_cds %>% group_by(subject, contig_id, sys_id.x, sys_wholeness, sys_score, protein_in_syst,
+                                            name_of_profiles_in_sys, sys_beg, sys_end, genes_count, type, subtype) %>% 
+  summarize(sum_strand = sum(strand), system_begin_position = min(start), system_end_position = max(end),
+            coverage_begin = max(min(start)-500, 1), 
+            coverge_end = min(max(end)+500, as.numeric(str_remove(contig_len, "len="))))
+
+  defense_systems <- defense_systems %>% mutate(coverage_region = paste(contig_id, ":", as.character(coverage_begin),
+                                                                      "-", as.character(coverge_end), sep = ""))
+
+  defense_systems <- defense_systems %>% mutate(coverage_file_name = paste(type, subtype, genes_count, 
+                                                                         sum_strand, floor(as.numeric(sys_wholeness) * 100), coverage_region, sep = "|"))
+  # n_distinct(defense_cds$CDS)
+
+  for (i in c(1:nrow(defense_systems))) {
+    # colnames(defense_systems)
+    left=as.numeric(defense_systems$system_begin_position[i])
+    right=as.numeric(defense_systems$system_end_position[i])
+    coverage_begin=as.numeric(defense_systems$coverage_begin[i])
+    coverage_end=as.numeric(defense_systems$coverge_end[i])
+    contig=as.character(defense_systems$contig_id[i])
+    coverage_region=as.character(defense_systems$coverage_region[i])
+    coverage_file_name=as.character(defense_systems$coverage_file_name[i])
+  
+    # print(paste(i, ":", left, "-", right, " of contig ", contig, sep = ""))
+    print(paste(i, nrow(defense_systems), sep = "/"))
+  
+    involved_cds <- all_cds %>% filter(contig_id == contig) %>% filter(start >= left, end <= right)
+    # print(nrow(involved_cds))
+    involved_defense_cds <- defense_cds %>% filter(contig_id == contig) %>% filter(start >= left & end <= right)
+    # print(nrow(involved_defense_cds))
+  
+    operon_structure <- involved_cds[,c("contig_id","gene_name", "start", "end", "strand")]
+    operon_structure$coverage_region <- coverage_region
+    operon_structure$coverage_file_name <- coverage_file_name
+    operon_structure$operon_left <- left
+    operon_structure$operon_right <- right
+    operon_structure$coverage_left <- coverage_begin
+    operon_structure$coverage_right <- coverage_end
+  
+    if (i == 1) {
+      operon_structure %>% write.table(file = operon_structure_output, sep = "\t",
+                                       row.names = F, col.names = T, quote = F, append = F)
+    } else {
+      operon_structure %>% write.table(file = operon_structure_output, sep = "\t",
+                                       row.names = F, col.names = F, quote = F, append = T)
+  } 
+}
+}
+```
+
+
+### test gggenes package for drawing gene structures
+```{r}
+operon_structure <- operon_structure %>% mutate(strand = case_when(
+  strand == 1 ~ 1, 
+  strand == -1 ~ 0
+))
+
+title <- as.character(unique(operon_structure$contig_id))
+left <- as.numeric(unique(operon_structure$coverage_left))
+right <- as.numeric(unique(operon_structure$coverage_right))
+
+operon_structure %>% ggplot(aes(xmin = start, xmax = end, y = contig_id, fill = gene_name, label = gene_name, forward = strand)) +
+  geom_gene_arrow() +
+  # facet_wrap(~ contig_id, scales = "free", ncol = 1) +
+  scale_fill_brewer(palette = "Set3") +
+  theme_genes() +
+  geom_gene_label(align = "centre") + 
+  scale_x_continuous(limits = c(left, right)) +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank()) + 
+  theme(legend.position = "None") + 
+  labs(x = title)
+```
+

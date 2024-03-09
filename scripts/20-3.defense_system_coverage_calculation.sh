@@ -20,7 +20,7 @@ BASE=/home/zhanggaopu/crisprome/hmp
 INPUT_DIR=${BASE}/intermediates/9.bowtie2_contigs_MGX_MTX/${data_type}
 INPUT_LIST=~/crisprome/hmp/intermediates/1.dataset_summary/1-8.total_nonIBD_metadata
 DEFENSE_SYSTEMS_INPUT=${BASE}/intermediates/20.coverage_analysis/system_position_summary
-OUTPUT_DIR=${BASE}/intermediates/20.coverage_analysis/coverge_depth/${data_type}; mkdir -p ${OUTPUT_DIR}
+OUTPUT_DIR=${BASE}/intermediates/20.coverage_analysis/coverage_depth_with_wholeness/${data_type}; mkdir -p ${OUTPUT_DIR}
 
 # Divide the task.
 if [ -z ${2} ] || [ -z ${3} ]; then

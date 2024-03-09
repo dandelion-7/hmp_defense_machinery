@@ -1,0 +1,196 @@
+---
+title: "20-4.coverage_plot"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# set basic parameters and load libraries
+```{r}
+setwd("~/crisprome/hmp/scripts/")
+
+library(ggplot2)
+library(gggenes)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(cowplot)
+```
+
+
+## Set the list of subjects, list of each subjects' operons, and list of each subject's contig taxonomy
+```{r}
+input_list <- read.delim("~/crisprome/hmp/intermediates/1.dataset_summary/1-8.total_nonIBD_metadata", sep = "\t", header = T)
+subjects <- as.character(unique(input_list$subject_id))
+
+for (subject in subjects) {
+  print(subject)
+  
+  contig_taxon_input <- paste("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/", 
+                              subject, "_summarized_contig_taxon_matrix.txt", sep = "")
+  operon_list_input <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/operon_structures/", subject, "_operon_structures.txt", sep = "")
+  
+  print(contig_taxon_input)
+  print(operon_list_input)
+}
+```
+
+## summarize the samples from each subject, for setting the printed figure sizes.
+```{r}
+# consider both MGX+MTX samples
+# sample_count <- input_list %>% filter(str_detect(library_type, "MGX") | str_detect(library_type, "MTX")) %>% 
+  # group_by(subject_id, library_type, time_point_num) %>% summarize(sample_count = n())
+# sample_count <- sample_count %>% group_by(subject_id) %>% summarize(subject_sample_count = n())
+# sample_count$figure_height <- sample_count$subject_sample_count + 1
+
+# only consider MTX samples
+sample_count <- input_list %>% filter(str_detect(library_type, "MTX")) %>% 
+  group_by(subject_id, library_type, time_point_num) %>% summarize(sample_count = n())
+sample_count <- sample_count %>% group_by(subject_id) %>% summarize(subject_sample_count = n())
+sample_count$figure_height <- sample_count$subject_sample_count + 1
+
+for (subject in subjects) {
+  print(subject)
+  pdf_output <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/coverage_plot/", subject, "_operon_coverages.pdf", sep = "")
+  pdf_height <- as.numeric(sample_count[sample_count$subject_id == subject, 3])
+  height_ratio <- pdf_height-1
+  
+  print(pdf_output)
+  print(pdf_height)
+  print(height_ratio)
+}
+```
+
+
+## plot the coverage+structure of operons belonging to indicated types.
+```{r}
+for (subject in subjects) {
+  # subject <- subjects[1]
+  print(subject)
+  
+  pdf_output <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/coverage_plot/", subject, "_Paris_operon_coverages.pdf", sep = "")
+  pdf_height <- as.numeric(sample_count[sample_count$subject_id == subject, 3])
+  height_ratio <- pdf_height-1
+  pdf(file = pdf_output, width = 10, height = pdf_height)
+  
+  contig_taxon_input <- paste("~/crisprome/hmp/intermediates/18.taxonomy_annotation/summarized_mmseqs2_results/", 
+                              subject, "_summarized_contig_taxon_matrix.txt", sep = "")
+  contig_taxon <- read.delim(file = contig_taxon_input, sep = "\t", header = T)
+  contig_taxon <- contig_taxon[, c("contig_id", "mmseqs2_phylum", "mmseqs2_genus")]
+  
+  
+  operon_list_input <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/operon_structures/", subject, "_operon_structures.txt", sep = "")
+  operon_list <- read.delim(file = operon_list_input, sep = "\t", header = T)
+  operon_list <- operon_list %>% 
+    filter(!(str_detect(gene_name, "BREX") & str_detect(coverage_file_name, "RM"))) %>% 
+    filter(!(str_detect(gene_name, "RM") & str_detect(coverage_file_name, "BREX"))) %>% 
+    filter(str_detect(coverage_file_name, "Paris")) #indicate the type of systems for plotting
+  operon_list <- left_join(operon_list, contig_taxon, by = "contig_id")
+  operons <- as.character(unique(operon_list$coverage_file_name))
+  
+  operon_count <- as.numeric(length(operons))
+  i <- 1
+  # operon <- operons[1]
+  for (operon in operons) {
+    print(paste(i, "/", operon_count, "  ", operon, sep = ""))
+    i <- i + 1
+    
+    # MGX_input <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/coverage_depth/MGX/", subject, "/", operon, ".txt", sep = "")
+    MTX_input <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/coverage_depth_with_wholeness/MTX/", subject, "/", operon, ".txt", sep = "")
+    # print(MGX_input)
+    # print(MTX_input)
+    
+    #---------------------------------------------------------------------------------------------------------------------------------
+    # Draw the gene structure
+    operon_structure <- operon_list %>% filter(coverage_file_name == operon)
+    operon_structure <- operon_structure %>% mutate(strand = case_when(
+      strand == 1 ~ 1, 
+      strand == -1 ~ 0
+    ))
+    
+    phylum <- as.character(unique(operon_list[operon_list$coverage_file_name == operon, "mmseqs2_phylum"]))
+    genus <- as.character(unique(operon_list[operon_list$coverage_file_name == operon, "mmseqs2_genus"]))
+    title <- paste(operon, phylum, genus, sep = " | ")
+    left <- as.numeric(unique(operon_structure$coverage_left))
+    right <- as.numeric(unique(operon_structure$coverage_right))
+
+    structure <- 
+      operon_structure %>% ggplot(aes(xmin = start, xmax = end, y = contig_id, fill = gene_name, label = gene_name, forward = strand)) +
+      geom_gene_arrow() +
+      # facet_wrap(~ contig_id, scales = "free", ncol = 1) +
+      scale_fill_brewer(palette = "Set3") +
+      theme_genes() +
+      geom_gene_label(align = "centre") + 
+      scale_x_continuous(limits = c(left, right)) +
+      theme(axis.text.y = element_blank(), axis.title.y = element_blank()) + 
+      theme(legend.position = "None") + 
+      labs(x = title) + 
+      theme(axis.title.x = element_text(size = 8))
+    
+    #---------------------------------------------------------------------------------------------------------------------------------
+    # Read the MGX coverage
+    # MGX_raw <- read.delim(file = MGX_input, sep = "\t", header = T)
+    # MGX_tidy <- MGX_raw %>% gather(key = "sample", value = "coverage", colnames(MGX_raw)[3:ncol(MGX_raw)])
+    # MGX_tidy$time_point <- as.data.frame(MGX_tidy$sample %>% str_split(pattern = "_"))[2, ] %>% t() %>% str_remove_all("C")
+    # MGX_tidy$data_type <- "MGX"
+    # MGX_tidy$type_time <- paste(MGX_tidy$data_type, MGX_tidy$time_point, sep = "_")
+    
+    # Read the MTX coverage
+    MTX_raw <- read.delim(file = MTX_input, sep = "\t", header = T)
+    MTX_tidy <- MTX_raw %>% gather(key = "sample", value = "coverage", colnames(MTX_raw)[3:ncol(MTX_raw)])
+    MTX_tidy$time_point <- as.data.frame(MTX_tidy$sample %>% str_split(pattern = "_"))[2, ] %>% t() %>% str_remove_all("C")
+    MTX_tidy$data_type <- "MTX"
+    MTX_tidy$type_time <- paste(MTX_tidy$data_type, MTX_tidy$time_point, sep = "_")
+    
+    # Plot the MGX+MTX coverage
+    # coverage_tidy <- rbind(MGX_tidy, MTX_tidy)
+    # total_coverage <- 
+      # coverage_tidy %>% ggplot(aes(x = position, y = coverage)) + 
+      # geom_col(aes(fill = time_point, color = time_point, alpha = data_type)) + 
+      # scale_x_continuous(limits = c(left, right)) + 
+      # scale_alpha_manual(values = c(0.7, 1))+
+      # facet_grid(type_time~.) + 
+      # theme_bw() +
+      # theme(legend.position = "none") + 
+      # theme(axis.title.x = element_blank())
+    
+    # Plot the MTX coverage
+    MTX_coverage <-
+      MTX_tidy %>% ggplot(aes(x = position, y = coverage)) +
+      geom_col(aes(fill = time_point, color = time_point)) +
+      scale_x_continuous(limits = c(left, right)) +
+      facet_grid(as.numeric(time_point)~.) +
+      theme_bw() +
+      theme(legend.position = "none") +
+      theme(axis.title.x = element_blank())
+
+    output <- plot_grid(MTX_coverage, structure, 
+                        ncol = 1, align = "v", axis = "lr", rel_heights =c(height_ratio, 1))
+    print(output)
+  }
+  dev.off()
+}
+```
+
