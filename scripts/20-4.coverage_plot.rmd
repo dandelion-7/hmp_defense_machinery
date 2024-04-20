@@ -90,7 +90,7 @@ for (subject in subjects) {
   # subject <- subjects[1]
   print(subject)
   
-  pdf_output <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/coverage_plot/", subject, "_Paris_operon_coverages.pdf", sep = "")
+  pdf_output <- paste("~/crisprome/hmp/intermediates/20.coverage_analysis/coverage_plot/", subject, "_Wadjet_operon_coverages.pdf", sep = "")
   pdf_height <- as.numeric(sample_count[sample_count$subject_id == subject, 3])
   height_ratio <- pdf_height-1
   pdf(file = pdf_output, width = 10, height = pdf_height)
@@ -106,7 +106,7 @@ for (subject in subjects) {
   operon_list <- operon_list %>% 
     filter(!(str_detect(gene_name, "BREX") & str_detect(coverage_file_name, "RM"))) %>% 
     filter(!(str_detect(gene_name, "RM") & str_detect(coverage_file_name, "BREX"))) %>% 
-    filter(str_detect(coverage_file_name, "Paris")) #indicate the type of systems for plotting
+    filter(str_detect(coverage_file_name, "Wadjet")) #indicate the type of systems for plotting
   operon_list <- left_join(operon_list, contig_taxon, by = "contig_id")
   operons <- as.character(unique(operon_list$coverage_file_name))
   
